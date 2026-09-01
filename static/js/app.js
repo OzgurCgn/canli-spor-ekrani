@@ -1,0 +1,441 @@
+"use strict";
+
+const state = {
+  activeLeague: "superlig",
+  selectedDate: toISODate(new Date()),
+  matches: [],
+  selectedMatchId: null,
+  liveOnly: false,
+  activeView: "matches",
+  fixtureRequest: 0,
+  detailRequest: 0,
+};
+
+const elements = {};
+
+function toISODate(date) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function fromISODate(value) {
+  const [year, month, day] = value.split("-").map(Number);
+  return new Date(year, month - 1, day, 12);
+}
+
+function addDays(value, amount) {
+  const date = fromISODate(value);
+  date.setDate(date.getDate() + amount);
+  return toISODate(date);
+}
+
+function node(tag, className, text) {
+  const item = document.createElement(tag);
+  if (className) item.className = className;
+  if (text !== undefined) item.textContent = String(text);
+  return item;
+}
+
+function image(src, className, alt) {
+  const img = node("img", className);
+  img.alt = alt || "";
+  img.loading = "lazy";
+  if (src) img.src = src;
+  img.addEventListener("error", () => { img.hidden = true; }, { once: true });
+  return img;
+}
+
+function emptyState(title, detail = "") {
+  const box = node("div", "empty-state");
+  box.append(node("strong", "", title));
+  if (detail) box.append(node("span", "", detail));
+  return box;
+}
+
+async function requestJSON(url) {
+  const response = await fetch(url, { headers: { Accept: "application/json" } });
+  let payload = null;
+  try { payload = await response.json(); } catch (_) { payload = null; }
+  if (!response.ok) {
+    throw new Error(payload?.detail || "Veri alınırken bir sorun oluştu.");
+  }
+  return payload;
+}
+
+function showToast(message) {
+  elements.toast.textContent = message;
+  elements.toast.hidden = false;
+  window.clearTimeout(showToast.timeoutId);
+  showToast.timeoutId = window.setTimeout(() => { elements.toast.hidden = true; }, 4500);
+}
+
+function setLoading(container, count = 3) {
+  container.replaceChildren(...Array.from({ length: count }, () => node("div", "skeleton")));
+}
+
+function updateDateControls() {
+  const selected = fromISODate(state.selectedDate);
+  const today = toISODate(new Date());
+  elements.datePicker.value = state.selectedDate;
+  elements.selectedDateLabel.textContent = new Intl.DateTimeFormat("tr-TR", {
+    day: "numeric",
+    month: "long",
+  }).format(selected);
+  elements.yesterdayButton.classList.toggle("active", state.selectedDate === addDays(today, -1));
+  elements.todayButton.classList.toggle("active", state.selectedDate === today);
+  elements.tomorrowButton.classList.toggle("active", state.selectedDate === addDays(today, 1));
+}
+
+function setDate(value) {
+  state.selectedDate = value;
+  state.selectedMatchId = null;
+  updateDateControls();
+  loadFixtures();
+}
+
+function setStageMatch(match) {
+  elements.stagePlaceholder.hidden = true;
+  elements.stageContent.hidden = false;
+  elements.detailsGrid.hidden = false;
+  elements.stageMeta.textContent = match.round ? `${match.league} • ${match.round}` : match.league;
+  elements.stageHome.textContent = match.homeTeam;
+  elements.stageAway.textContent = match.awayTeam;
+  elements.stageScore.textContent = match.score;
+  setImage(elements.stageHomeLogo, match.homeLogo, `${match.homeTeam} logosu`);
+  setImage(elements.stageAwayLogo, match.awayLogo, `${match.awayTeam} logosu`);
+  elements.lineupHomeName.textContent = match.homeTeam;
+  elements.lineupAwayName.textContent = match.awayTeam;
+  elements.stageTag.className = `match-tag${match.status === "LIVE" ? " live" : ""}`;
+  elements.stageTag.textContent = match.status === "LIVE" ? match.minute : (match.fullDate || match.time);
+}
+
+function setImage(img, src, alt) {
+  img.hidden = !src;
+  img.alt = alt;
+  if (src) img.src = src;
+}
+
+function resetDetails() {
+  elements.homeEventsList.replaceChildren();
+  elements.awayEventsList.replaceChildren();
+  elements.timeline.replaceChildren(node("div", "skeleton"));
+  elements.statsContainer.replaceChildren(node("div", "skeleton"));
+  elements.homeLineupList.replaceChildren(node("div", "skeleton"));
+  elements.awayLineupList.replaceChildren(node("div", "skeleton"));
+  elements.venueText.textContent = "Yükleniyor...";
+  elements.refereeText.textContent = "Yükleniyor...";
+}
+
+async function loadFixtures() {
+  const requestId = ++state.fixtureRequest;
+  setLoading(elements.matchFeed);
+  try {
+    const params = new URLSearchParams({ league: state.activeLeague, date: state.selectedDate });
+    const data = await requestJSON(`/api/fixtures?${params}`);
+    if (requestId !== state.fixtureRequest) return;
+    state.matches = data.matches || [];
+    renderMatches();
+    renderTicker();
+    updateLiveCount();
+
+    const selected = state.matches.find(match => match.id === state.selectedMatchId);
+    if (selected) {
+      setStageMatch(selected);
+      if (selected.status === "LIVE") loadMatchDetail(selected);
+    } else if (state.matches.length) {
+      selectMatch(state.matches[0]);
+    } else {
+      clearStage("Bu tarihte maç bulunamadı.");
+    }
+  } catch (error) {
+    if (requestId !== state.fixtureRequest) return;
+    elements.matchFeed.replaceChildren(emptyState("Maçlar yüklenemedi", error.message));
+    showToast(error.message);
+  }
+}
+
+function visibleMatches() {
+  return state.liveOnly ? state.matches.filter(match => match.status === "LIVE") : state.matches;
+}
+
+function renderMatches() {
+  const matches = visibleMatches();
+  if (!matches.length) {
+    const message = state.liveOnly ? "Şu anda canlı maç yok." : "Bu tarihte maç bulunamadı.";
+    elements.matchFeed.replaceChildren(emptyState(message));
+    return;
+  }
+
+  const cards = matches.map(match => {
+    const card = node("button", `feed-card ${match.status}${match.id === state.selectedMatchId ? " active-selected" : ""}`);
+    card.type = "button";
+    card.dataset.matchId = match.id;
+    card.setAttribute("aria-label", `${match.homeTeam} - ${match.awayTeam} maçını aç`);
+
+    const header = node("span", "feed-header");
+    header.append(node("span", "", match.round || match.league), node("span", "status-text", match.time));
+
+    const body = node("span", "feed-body");
+    const teams = node("span", "feed-teams");
+    for (const [name, logo] of [[match.homeTeam, match.homeLogo], [match.awayTeam, match.awayLogo]]) {
+      const team = node("span", "feed-team");
+      team.append(image(logo, "team-logo feed-logo", ""), node("span", "", name));
+      teams.append(team);
+    }
+    body.append(teams, node("span", "score-badge", match.score));
+    card.append(header, body);
+    card.addEventListener("click", () => selectMatch(match));
+    return card;
+  });
+  elements.matchFeed.replaceChildren(...cards);
+}
+
+function clearStage(message) {
+  state.selectedMatchId = null;
+  elements.stagePlaceholder.textContent = message;
+  elements.stagePlaceholder.hidden = false;
+  elements.stageContent.hidden = true;
+  elements.detailsGrid.hidden = true;
+}
+
+async function selectMatch(match) {
+  if (!match) return;
+  state.selectedMatchId = match.id;
+  renderMatches();
+  setStageMatch(match);
+  resetDetails();
+  await loadMatchDetail(match);
+}
+
+async function loadMatchDetail(match) {
+  const requestId = ++state.detailRequest;
+  try {
+    const params = new URLSearchParams({ event_id: match.id, league_slug: match.leagueSlug });
+    const detail = await requestJSON(`/api/match-detail?${params}`);
+    if (requestId !== state.detailRequest || match.id !== state.selectedMatchId) return;
+    renderSummaryEvents(detail);
+    renderTimeline(detail.events || [], match);
+    renderStats(detail.stats || []);
+    renderLineups(detail.lineups || {});
+    elements.venueText.textContent = detail.venue || "Belirtilmedi";
+    elements.refereeText.textContent = detail.referee || "Belirtilmedi";
+  } catch (error) {
+    if (requestId !== state.detailRequest) return;
+    elements.timeline.replaceChildren(emptyState("Maç detayı yüklenemedi", error.message));
+    elements.statsContainer.replaceChildren(emptyState("İstatistik yüklenemedi"));
+    elements.homeLineupList.replaceChildren(emptyState("Kadro yüklenemedi"));
+    elements.awayLineupList.replaceChildren(emptyState("Kadro yüklenemedi"));
+    elements.venueText.textContent = "-";
+    elements.refereeText.textContent = "-";
+    showToast(error.message);
+  }
+}
+
+function summaryEvent(event, reverse = false) {
+  const line = node("div", `scorer-line${event.isOwnGoal ? " own-goal" : ""}`);
+  const parts = [
+    node("span", "event-icon", event.icon),
+    node("strong", "", event.scorer),
+    node("span", "scorer-time", event.clock),
+  ];
+  if (event.assist) parts.push(node("span", "scorer-assist", event.assist));
+  line.append(...(reverse ? parts.reverse() : parts));
+  return line;
+}
+
+function renderSummaryEvents(detail) {
+  const home = (detail.homeEvents || []).map(event => summaryEvent(event));
+  const away = (detail.awayEvents || []).map(event => summaryEvent(event, true));
+  elements.homeEventsList.replaceChildren(...home);
+  elements.awayEventsList.replaceChildren(...away);
+}
+
+function renderTimeline(events, match) {
+  elements.eventCount.textContent = `${events.length} olay`;
+  if (!events.length) {
+    elements.timeline.replaceChildren(emptyState("Maç olayı bulunamadı."));
+    return;
+  }
+  const rows = events.map(event => {
+    const row = node("div", `timeline-event ${event.type || ""}`);
+    const copy = node("div", "timeline-copy");
+    copy.append(node("strong", "", event.scorer), node("small", "", event.tag));
+    if (event.assist) copy.append(node("small", "", event.assist));
+    const sideName = event.teamSide === "home" ? match.homeTeam : match.awayTeam;
+    copy.append(node("span", "side-pill", sideName));
+    row.append(node("span", "timeline-clock", event.clock), node("span", "timeline-icon", event.icon), copy);
+    return row;
+  });
+  elements.timeline.replaceChildren(...rows);
+}
+
+function numericValue(value) {
+  const parsed = Number.parseFloat(String(value).replace("%", "").replace(",", "."));
+  return Number.isFinite(parsed) ? Math.max(parsed, 0) : 0;
+}
+
+function renderStats(stats) {
+  if (!stats.length) {
+    elements.statsContainer.replaceChildren(emptyState("Maç istatistikleri mevcut değil."));
+    return;
+  }
+  const rows = stats.map(stat => {
+    const row = node("div", "stat-row");
+    const labels = node("div", "stat-labels");
+    labels.append(node("span", "", stat.home), node("span", "stat-title", stat.title), node("span", "", stat.away));
+    const homeValue = numericValue(stat.home);
+    const awayValue = numericValue(stat.away);
+    const total = homeValue + awayValue || 1;
+    const track = node("div", "stat-track");
+    const homeBar = node("div", "stat-home");
+    const awayBar = node("div", "stat-away");
+    homeBar.style.width = `${(homeValue / total) * 100}%`;
+    awayBar.style.width = `${(awayValue / total) * 100}%`;
+    track.append(homeBar, awayBar);
+    row.append(labels, track);
+    return row;
+  });
+  elements.statsContainer.replaceChildren(...rows);
+}
+
+function renderPlayer(player) {
+  const row = node("div", "player-row");
+  row.append(node("span", "player-number", player.jersey || "-"), node("span", "", player.name || "-"), node("span", "player-position", player.pos || ""));
+  return row;
+}
+
+function renderLineups(lineups) {
+  elements.lineupBadge.textContent = lineups.isOfficial ? "Resmi 11'ler" : "Kadro açıklanmadı";
+  elements.lineupHomeForm.textContent = lineups.homeFormation || "";
+  elements.lineupAwayForm.textContent = lineups.awayFormation || "";
+  const home = (lineups.home || []).map(renderPlayer);
+  const away = (lineups.away || []).map(renderPlayer);
+  elements.homeLineupList.replaceChildren(...(home.length ? home : [emptyState("Kadro açıklanmadı.")]));
+  elements.awayLineupList.replaceChildren(...(away.length ? away : [emptyState("Kadro açıklanmadı.")]));
+}
+
+function renderTicker() {
+  const matches = state.matches;
+  if (!matches.length) {
+    elements.tickerTrack.replaceChildren(node("div", "ticker-item", "Bu tarih için skor bulunamadı."));
+    return;
+  }
+  const fragment = document.createDocumentFragment();
+  for (const match of matches) {
+    const item = node("div", "ticker-item");
+    item.append(node("strong", "", match.homeTeam), node("span", "", match.score), node("strong", "", match.awayTeam), node("span", `ticker-status ${match.status}`, `(${match.time})`));
+    fragment.append(item);
+  }
+  const firstSet = Array.from(fragment.childNodes);
+  elements.tickerTrack.replaceChildren(...firstSet, ...firstSet.map(item => item.cloneNode(true)));
+}
+
+function updateLiveCount() {
+  const count = state.matches.filter(match => match.status === "LIVE").length;
+  elements.liveCount.textContent = count ? `${count} CANLI MAÇ` : "CANLI AKIŞ";
+}
+
+async function loadStandings() {
+  setLoading(elements.standingsPanel, 4);
+  try {
+    const data = await requestJSON(`/api/standings?league=${encodeURIComponent(state.activeLeague)}`);
+    renderStandings(data.groups || []);
+  } catch (error) {
+    elements.standingsPanel.replaceChildren(emptyState("Puan durumu yüklenemedi", error.message));
+    showToast(error.message);
+  }
+}
+
+function renderStandings(groups) {
+  if (!groups.length) {
+    elements.standingsPanel.replaceChildren(emptyState("Bu lig için puan durumu yok."));
+    return;
+  }
+  const content = [];
+  for (const group of groups) {
+    content.push(node("div", "standings-group-title", group.name));
+    const wrap = node("div", "standings-wrap");
+    const table = node("table", "standings-table");
+    const head = node("thead");
+    const headRow = node("tr");
+    for (const label of ["#", "Takım", "O", "G", "B", "M", "AV", "P"]) headRow.append(node("th", "", label));
+    head.append(headRow);
+    const body = node("tbody");
+    for (const standing of group.rows || []) {
+      const row = node("tr");
+      row.append(node("td", "", standing.rank));
+      const teamCell = node("td");
+      const team = node("span", "table-team");
+      team.append(image(standing.logo, "team-logo table-logo", ""), node("span", "", standing.team));
+      teamCell.append(team);
+      row.append(teamCell);
+      for (const key of ["played", "wins", "draws", "losses", "goalDifference"]) row.append(node("td", "", standing[key]));
+      row.append(node("td", "points-cell", standing.points));
+      body.append(row);
+    }
+    table.append(head, body);
+    wrap.append(table);
+    content.push(wrap);
+  }
+  elements.standingsPanel.replaceChildren(...content);
+}
+
+function setView(view) {
+  state.activeView = view;
+  const matchesActive = view === "matches";
+  elements.matchesTab.classList.toggle("active", matchesActive);
+  elements.standingsTab.classList.toggle("active", !matchesActive);
+  elements.matchFeed.hidden = !matchesActive;
+  elements.standingsPanel.hidden = matchesActive;
+  elements.liveFilter.hidden = !matchesActive;
+  if (!matchesActive) loadStandings();
+}
+
+function bindElements() {
+  const ids = [
+    "liveCount", "previousDay", "yesterdayButton", "todayButton", "tomorrowButton", "datePicker", "nextDay",
+    "selectedDateLabel", "stagePlaceholder", "stageContent", "detailsGrid", "stageMeta", "stageHomeLogo",
+    "stageAwayLogo", "stageHome", "stageAway", "stageScore", "homeEventsList", "awayEventsList", "stageTag",
+    "timeline", "eventCount", "statsContainer", "lineupBadge", "lineupHomeName", "lineupAwayName", "lineupHomeForm",
+    "lineupAwayForm", "homeLineupList", "awayLineupList", "venueText", "refereeText", "leagueSelect", "matchesTab",
+    "standingsTab", "liveFilter", "matchFeed", "standingsPanel", "tickerTrack", "toast",
+  ];
+  for (const id of ids) elements[id] = document.getElementById(id);
+}
+
+function bindEvents() {
+  elements.previousDay.addEventListener("click", () => setDate(addDays(state.selectedDate, -1)));
+  elements.nextDay.addEventListener("click", () => setDate(addDays(state.selectedDate, 1)));
+  const today = () => toISODate(new Date());
+  elements.yesterdayButton.addEventListener("click", () => setDate(addDays(today(), -1)));
+  elements.todayButton.addEventListener("click", () => setDate(today()));
+  elements.tomorrowButton.addEventListener("click", () => setDate(addDays(today(), 1)));
+  elements.datePicker.addEventListener("change", event => { if (event.target.value) setDate(event.target.value); });
+  elements.leagueSelect.addEventListener("change", event => {
+    state.activeLeague = event.target.value;
+    state.selectedMatchId = null;
+    if (state.activeView === "matches") loadFixtures(); else loadStandings();
+  });
+  elements.liveFilter.addEventListener("click", () => {
+    state.liveOnly = !state.liveOnly;
+    elements.liveFilter.classList.toggle("active", state.liveOnly);
+    elements.liveFilter.setAttribute("aria-pressed", String(state.liveOnly));
+    renderMatches();
+  });
+  elements.matchesTab.addEventListener("click", () => setView("matches"));
+  elements.standingsTab.addEventListener("click", () => setView("standings"));
+}
+
+function init() {
+  bindElements();
+  bindEvents();
+  updateDateControls();
+  loadFixtures();
+  window.setInterval(() => {
+    if (state.activeView === "matches" && !document.hidden) loadFixtures();
+  }, 15000);
+}
+
+document.addEventListener("DOMContentLoaded", init);
