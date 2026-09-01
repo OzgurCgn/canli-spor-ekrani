@@ -77,12 +77,10 @@ def parse_fixtures(payload: Dict[str, Any], league: Dict[str, str]) -> List[Dict
     return matches
 
 
-def _side_for_team(team_id: str, home_id: str, away_id: str, own_goal: bool = False) -> str:
-    if own_goal:
-        if team_id == home_id:
-            return "away"
-        if team_id == away_id:
-            return "home"
+def _side_for_team(team_id: str, home_id: str, away_id: str) -> str:
+    # ESPN assigns an own-goal event to the team that receives the goal,
+    # not to the offending player's team. The event team therefore already
+    # points at the correct side and must not be inverted.
     return "home" if team_id == home_id else "away"
 
 
@@ -101,6 +99,14 @@ def _participant_names(item: Dict[str, Any]) -> Dict[str, str]:
     return {"scorer": scorer, "assist": assist}
 
 
+def _participant_list(item: Dict[str, Any]) -> List[str]:
+    return [
+        participant.get("athlete", {}).get("displayName", "")
+        for participant in item.get("participants", [])
+        if participant.get("athlete", {}).get("displayName")
+    ]
+
+
 def _parse_event(item: Dict[str, Any], home_id: str, away_id: str) -> Optional[Dict[str, Any]]:
     type_text = str(item.get("type", {}).get("text", "")).lower()
     is_penalty = bool(item.get("penaltyKick")) or "penalty" in type_text
@@ -113,6 +119,8 @@ def _parse_event(item: Dict[str, Any], home_id: str, away_id: str) -> Optional[D
         return None
 
     names = _participant_names(item)
+    participants = _participant_list(item)
+    player_out = participants[1] if is_substitution and len(participants) > 1 else ""
     if is_own_goal:
         icon, tag, event_type = "⚽", "K.K.", "own-goal"
     elif is_penalty:
@@ -140,9 +148,12 @@ def _parse_event(item: Dict[str, Any], home_id: str, away_id: str) -> Optional[D
         "scorer": names["scorer"],
         "isOwnGoal": is_own_goal,
         "isPenalty": is_penalty,
-        "assist": f"Asist: {names['assist']}" if names["assist"] and not is_own_goal else "",
+        "assist": f"Asist: {names['assist']}" if names["assist"] and not is_own_goal and not is_substitution else "",
+        "detail": f"Çıkan: {player_out}" if player_out else "",
+        "playerIn": names["scorer"] if is_substitution else "",
+        "playerOut": player_out,
         "isImportant": bool(is_goal or is_red),
-        "teamSide": _side_for_team(team_id, home_id, away_id, is_own_goal),
+        "teamSide": _side_for_team(team_id, home_id, away_id),
     }
 
 
