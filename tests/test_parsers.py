@@ -29,13 +29,14 @@ def test_fixture_parser_includes_logos_and_date():
     assert match["score"] == "vs"
 
 
-def test_own_goal_is_credited_to_opposing_side():
+def test_own_goal_uses_espn_scoring_team_without_inversion():
     payload = {
         "header": {"competitions": [{
             "competitors": [{"id": "home", "homeAway": "home"}, {"id": "away", "homeAway": "away"}],
             "details": [{
                 "clock": {"displayValue": "31'"},
-                "team": {"id": "home"},
+                # ESPN attributes own goals to the team receiving the goal.
+                "team": {"id": "away"},
                 "scoringPlay": True,
                 "ownGoal": True,
                 "participants": [{"athlete": {"displayName": "Oyuncu A"}}],
@@ -48,6 +49,31 @@ def test_own_goal_is_credited_to_opposing_side():
     assert result["homeEvents"] == []
     assert result["awayEvents"][0]["scorer"] == "Oyuncu A"
     assert result["events"][0]["teamSide"] == "away"
+
+
+def test_substitution_labels_outgoing_player_without_assist():
+    payload = {
+        "header": {"competitions": [{
+            "competitors": [{"id": "home", "homeAway": "home"}, {"id": "away", "homeAway": "away"}],
+        }]},
+        "keyEvents": [{
+            "clock": {"displayValue": "63'"},
+            "team": {"id": "home"},
+            "type": {"text": "Substitution"},
+            "participants": [
+                {"athlete": {"displayName": "Evann Guessand"}},
+                {"athlete": {"displayName": "Jørgen Strand Larsen"}},
+            ],
+        }],
+    }
+
+    event = parse_match_detail(payload)["events"][0]
+
+    assert event["scorer"] == "Evann Guessand"
+    assert event["assist"] == ""
+    assert event["detail"] == "Çıkan: Jørgen Strand Larsen"
+    assert event["playerIn"] == "Evann Guessand"
+    assert event["playerOut"] == "Jørgen Strand Larsen"
 
 
 def test_full_timeline_prefers_key_events_over_goal_only_details():
