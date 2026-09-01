@@ -1,3 +1,4 @@
+import asyncio
 import time
 from typing import Any, Dict, List, Optional
 
@@ -70,6 +71,7 @@ def parse_fixtures(payload: Dict[str, Any], league: Dict[str, str]) -> List[Dict
                 "minute": time_meta["display"],
                 "time": time_meta["display"],
                 "fullDate": time_meta["full_date"],
+                "startTime": raw_date,
                 "matchDate": match_dt.date().isoformat() if match_dt else "",
                 "round": f"{week}. Hafta" if week else "",
             }
@@ -298,6 +300,33 @@ class ESPNService:
         result = {"league": league["name"], "date": selected_date, "matches": parse_fixtures(payload, league)}
         self.cache.set(key, result)
         return result
+
+    async def all_fixtures(self, leagues: List[Dict[str, str]], selected_date: str) -> Dict[str, Any]:
+        results = await asyncio.gather(
+            *(self.fixtures(league, selected_date) for league in leagues),
+            return_exceptions=True,
+        )
+        successful = [result for result in results if isinstance(result, dict)]
+        if not successful:
+            raise ESPNServiceError("Liglerin maç verilerine şu anda ulaşılamıyor.")
+
+        unique_matches: Dict[str, Dict[str, Any]] = {}
+        for result in successful:
+            for match in result.get("matches", []):
+                match_id = str(match.get("id", ""))
+                if match_id:
+                    unique_matches.setdefault(match_id, match)
+
+        status_order = {"LIVE": 0, "NS": 1, "FT": 2}
+        matches = sorted(
+            unique_matches.values(),
+            key=lambda match: (
+                status_order.get(str(match.get("status")), 3),
+                str(match.get("startTime", "")),
+                str(match.get("league", "")),
+            ),
+        )
+        return {"league": "Tüm Ligler", "date": selected_date, "matches": matches}
 
     async def match_detail(self, event_id: str, league_slug: str) -> Dict[str, Any]:
         key = f"detail:{league_slug}:{event_id}"

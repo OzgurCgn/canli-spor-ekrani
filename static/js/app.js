@@ -1,7 +1,7 @@
 "use strict";
 
 const state = {
-  activeLeague: "superlig",
+  activeLeague: "all",
   selectedDate: toISODate(new Date()),
   matches: [],
   selectedMatchId: null,
@@ -144,8 +144,10 @@ async function loadFixtures() {
     if (selected) {
       setStageMatch(selected);
       if (selected.status === "LIVE") loadMatchDetail(selected);
-    } else if (state.matches.length) {
+    } else if (state.matches.length && state.activeLeague !== "all") {
       selectMatch(state.matches[0]);
+    } else if (state.matches.length) {
+      renderDayOverview(visibleMatches());
     } else {
       clearStage("Bu tarihte maç bulunamadı.");
     }
@@ -175,7 +177,8 @@ function renderMatches() {
     card.setAttribute("aria-label", `${match.homeTeam} - ${match.awayTeam} maçını aç`);
 
     const header = node("span", "feed-header");
-    header.append(node("span", "", match.round || match.league), node("span", "status-text", match.time));
+    const competition = match.round ? `${match.league} • ${match.round}` : match.league;
+    header.append(node("span", "", competition), node("span", "status-text", match.time));
 
     const body = node("span", "feed-body");
     const teams = node("span", "feed-teams");
@@ -190,6 +193,61 @@ function renderMatches() {
     return card;
   });
   elements.matchFeed.replaceChildren(...cards);
+}
+
+function overviewMatchCard(match) {
+  const card = node("button", `overview-match ${match.status}`);
+  card.type = "button";
+  card.setAttribute("aria-label", `${match.homeTeam} - ${match.awayTeam} maçını aç`);
+
+  const meta = node("span", "overview-meta");
+  const statusText = match.status === "LIVE" ? match.minute : (match.status === "FT" ? "MS" : match.time);
+  meta.append(node("span", "", match.league), node("strong", `overview-status ${match.status}`, statusText));
+
+  const teams = node("span", "overview-teams");
+  for (const [name, logo] of [[match.homeTeam, match.homeLogo], [match.awayTeam, match.awayLogo]]) {
+    const team = node("span", "overview-team");
+    team.append(image(logo, "team-logo overview-logo", ""), node("span", "", name));
+    teams.append(team);
+  }
+  card.append(meta, teams, node("span", "overview-score", match.score));
+  card.addEventListener("click", () => selectMatch(match));
+  return card;
+}
+
+function renderDayOverview(matches) {
+  state.selectedMatchId = null;
+  elements.stageContent.hidden = true;
+  elements.detailsGrid.hidden = true;
+  elements.stagePlaceholder.hidden = false;
+
+  const dateText = new Intl.DateTimeFormat("tr-TR", {
+    day: "numeric",
+    month: "long",
+    weekday: "long",
+  }).format(fromISODate(state.selectedDate));
+  const overview = node("div", "day-overview");
+  const heading = node("div", "overview-heading");
+  heading.append(node("span", "overview-kicker", "GÜNÜN MAÇLARI"), node("h2", "", dateText));
+  overview.append(heading);
+
+  const sections = [
+    { title: "Canlı", className: "live", matches: matches.filter(match => match.status === "LIVE") },
+    { title: "Tamamlanan", className: "finished", matches: matches.filter(match => match.status === "FT") },
+    { title: "Yaklaşan", className: "upcoming", matches: matches.filter(match => match.status !== "LIVE" && match.status !== "FT") },
+  ];
+  for (const section of sections) {
+    if (!section.matches.length) continue;
+    const block = node("section", `overview-section ${section.className}`);
+    const title = node("div", "overview-section-title");
+    title.append(node("span", "overview-dot"), node("strong", "", section.title), node("span", "overview-count", section.matches.length));
+    const grid = node("div", "overview-grid");
+    grid.append(...section.matches.map(overviewMatchCard));
+    block.append(title, grid);
+    overview.append(block);
+  }
+  if (!matches.length) overview.append(emptyState(state.liveOnly ? "Şu anda canlı maç yok." : "Bu tarihte maç bulunamadı."));
+  elements.stagePlaceholder.replaceChildren(overview);
 }
 
 function clearStage(message) {
@@ -346,6 +404,10 @@ function updateLiveCount() {
 
 async function loadStandings() {
   setLoading(elements.standingsPanel, 4);
+  if (state.activeLeague === "all") {
+    elements.standingsPanel.replaceChildren(emptyState("Puan durumu için bir lig seçin."));
+    return;
+  }
   try {
     const data = await requestJSON(`/api/standings?league=${encodeURIComponent(state.activeLeague)}`);
     renderStandings(data.groups || []);
@@ -430,6 +492,7 @@ function bindEvents() {
     elements.liveFilter.classList.toggle("active", state.liveOnly);
     elements.liveFilter.setAttribute("aria-pressed", String(state.liveOnly));
     renderMatches();
+    if (!state.selectedMatchId) renderDayOverview(visibleMatches());
   });
   elements.matchesTab.addEventListener("click", () => setView("matches"));
   elements.standingsTab.addEventListener("click", () => setView("standings"));

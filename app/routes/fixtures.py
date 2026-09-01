@@ -14,16 +14,18 @@ router = APIRouter(prefix="/api", tags=["fixtures"])
 
 @router.get("/fixtures")
 async def get_fixtures(
-    league: str = Query("superlig"),
+    league: str = Query("all"),
     match_date: Optional[str] = Query(None, alias="date"),
 ):
-    if league not in LEAGUE_MAP:
+    if league != "all" and league not in LEAGUE_MAP:
         raise HTTPException(status_code=422, detail="Desteklenmeyen lig.")
     try:
         selected: date = parse_selected_date(match_date)
     except ValueError as exc:
         raise HTTPException(status_code=422, detail="Tarih YYYY-MM-DD biçiminde olmalı.") from exc
     try:
+        if league == "all":
+            return await espn_service.all_fixtures(list(LEAGUE_MAP.values()), selected.isoformat())
         return await espn_service.fixtures(LEAGUE_MAP[league], selected.isoformat())
     except ESPNServiceError as exc:
         raise upstream_error(exc) from exc

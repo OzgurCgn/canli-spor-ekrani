@@ -1,4 +1,6 @@
-from app.services.espn import parse_fixtures, parse_match_detail, parse_standings
+import asyncio
+
+from app.services.espn import ESPNService, parse_fixtures, parse_match_detail, parse_standings
 
 
 LEAGUE = {"slug": "tur.1", "name": "Trendyol Süper Lig"}
@@ -25,8 +27,31 @@ def test_fixture_parser_includes_logos_and_date():
     assert match["homeTeam"] == "Fenerbahçe"
     assert match["awayTeam"] == "Beşiktaş"
     assert match["homeLogo"] == "home.png"
+    assert match["startTime"] == "2026-09-01T17:00Z"
     assert match["matchDate"] == "2026-09-01"
     assert match["score"] == "vs"
+
+
+def test_all_fixtures_combines_leagues_and_prioritizes_live_matches():
+    service = ESPNService()
+
+    async def fake_fixtures(league, selected_date):
+        status = "LIVE" if league["slug"] == "eng.1" else "NS"
+        return {"matches": [{
+            "id": league["slug"],
+            "league": league["name"],
+            "status": status,
+            "startTime": "2026-09-01T19:00Z",
+        }]}
+
+    service.fixtures = fake_fixtures
+    result = asyncio.run(service.all_fixtures(
+        [{"slug": "tur.1", "name": "Süper Lig"}, {"slug": "eng.1", "name": "Premier League"}],
+        "2026-09-01",
+    ))
+
+    assert result["league"] == "Tüm Ligler"
+    assert [match["id"] for match in result["matches"]] == ["eng.1", "tur.1"]
 
 
 def test_own_goal_uses_espn_scoring_team_without_inversion():
