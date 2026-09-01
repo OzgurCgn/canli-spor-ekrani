@@ -238,8 +238,14 @@ function summaryEvent(event, reverse = false) {
   const parts = [
     node("span", "event-icon", event.icon),
     node("strong", "", event.scorer),
-    node("span", "scorer-time", event.clock),
   ];
+  if (event.isOwnGoal) {
+    const badge = node("span", "own-goal-badge", "K.K.");
+    badge.title = "Kendi kalesine gol";
+    badge.setAttribute("aria-label", "Kendi kalesine gol");
+    parts.push(badge);
+  }
+  parts.push(node("span", "scorer-time", event.clock));
   if (event.assist) parts.push(node("span", "scorer-assist", event.assist));
   line.append(...(reverse ? parts.reverse() : parts));
   return line;
