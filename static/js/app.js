@@ -263,6 +263,7 @@ function renderTimeline(events, match) {
     const copy = node("div", "timeline-copy");
     copy.append(node("strong", "", event.scorer), node("small", "", event.tag));
     if (event.assist) copy.append(node("small", "", event.assist));
+    if (event.detail) copy.append(node("small", "event-detail", event.detail));
     const sideName = event.teamSide === "home" ? match.homeTeam : match.awayTeam;
     copy.append(node("span", "side-pill", sideName));
     row.append(node("span", "timeline-clock", event.clock), node("span", "timeline-icon", event.icon), copy);
