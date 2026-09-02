@@ -37,8 +37,8 @@ TEAM_NAME_FIXES = {
 }
 
 TEAM_LOGO_OVERRIDES = {
-    "132335": "/static/images/team-logos/amed-sfk.png",
-    "21446": "/static/images/team-logos/al-faisaly.png",
+    "132335": "/images/team-logos/amed-sfk.png",
+    "21446": "/images/team-logos/al-faisaly.png",
 }
 
 

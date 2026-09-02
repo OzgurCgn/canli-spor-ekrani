@@ -1,5 +1,8 @@
 import asyncio
 
+from fastapi.testclient import TestClient
+
+from app.main import app
 from app.services.espn import ESPNService, parse_fixtures, parse_match_detail, parse_standings
 
 
@@ -47,8 +50,17 @@ def test_fixture_parser_uses_local_logo_overrides_for_missing_espn_assets():
 
     match = parse_fixtures(payload, LEAGUE)[0]
 
-    assert match["homeLogo"] == "/static/images/team-logos/amed-sfk.png"
-    assert match["awayLogo"] == "/static/images/team-logos/al-faisaly.png"
+    assert match["homeLogo"] == "/images/team-logos/amed-sfk.png"
+    assert match["awayLogo"] == "/images/team-logos/al-faisaly.png"
+
+
+def test_local_logo_overrides_are_served():
+    client = TestClient(app)
+
+    for path in ("/images/team-logos/amed-sfk.png", "/images/team-logos/al-faisaly.png"):
+        response = client.get(path)
+        assert response.status_code == 200
+        assert response.headers["content-type"] == "image/png"
 
 
 def test_all_fixtures_combines_leagues_and_prioritizes_live_matches():
