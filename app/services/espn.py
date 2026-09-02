@@ -151,6 +151,7 @@ def _parse_event(item: Dict[str, Any], home_id: str, away_id: str) -> Optional[D
         "isOwnGoal": is_own_goal,
         "isPenalty": is_penalty,
         "assist": f"Asist: {names['assist']}" if names["assist"] and not is_own_goal and not is_substitution else "",
+        "assistPlayer": names["assist"] if names["assist"] and not is_own_goal and not is_substitution else "",
         "detail": f"Çıkan: {player_out}" if player_out else "",
         "playerIn": names["scorer"] if is_substitution else "",
         "playerOut": player_out,
@@ -168,18 +169,89 @@ def _team_map(items: List[Dict[str, Any]]) -> Dict[str, Dict[str, Any]]:
     return result
 
 
-def _lineup(roster: Dict[str, Any]) -> List[Dict[str, str]]:
-    players = [player for player in roster.get("roster", []) if player.get("starter")]
+PLAYER_STAT_NAMES = {
+    "totalGoals",
+    "goalAssists",
+    "totalShots",
+    "shotsOnTarget",
+    "yellowCards",
+    "redCards",
+    "foulsCommitted",
+    "foulsSuffered",
+    "ownGoals",
+}
+
+
+def _related_events(player_name: str, events: List[Dict[str, Any]]) -> List[Dict[str, str]]:
+    badges: List[Dict[str, str]] = []
+    event_labels = {
+        "goal": ("⚽", "goal"),
+        "own-goal": ("K.K.", "own-goal"),
+        "yellow-card": ("🟨", "card"),
+        "red-card": ("🟥", "card"),
+        "penalty": ("⚽ P", "goal"),
+    }
+    for event in events:
+        clock = event.get("clock", "")
+        if event.get("assistPlayer") == player_name:
+            badges.append({"label": f"A {clock}", "tone": "assist", "title": "Asist"})
+        if event.get("type") == "substitution":
+            if event.get("playerIn") == player_name:
+                badges.append({"label": f"↗ {clock}", "tone": "sub-in", "title": "Oyuna girdi"})
+            elif event.get("playerOut") == player_name:
+                badges.append({"label": f"↘ {clock}", "tone": "sub-out", "title": "Oyundan çıktı"})
+            continue
+        if event.get("scorer") == player_name and event.get("type") in event_labels:
+            label, tone = event_labels[event["type"]]
+            badges.append({"label": f"{label} {clock}", "tone": tone, "title": event.get("tag", "")})
+    return badges
+
+
+def _jersey_image(athlete: Dict[str, Any]) -> str:
+    images = athlete.get("jerseyImages") or []
+    dark = next((image for image in images if "dark" in (image.get("rel") or [])), None)
+    selected = dark or (images[0] if images else {})
+    return str(selected.get("href", ""))
+
+
+def _player_data(player: Dict[str, Any], events: List[Dict[str, Any]]) -> Dict[str, Any]:
+    athlete = player.get("athlete", {})
+    name = athlete.get("displayName", "")
+    position = player.get("position", {}) or athlete.get("position", {}) or {}
+    stats = {
+        stat.get("name"): stat.get("displayValue", "0")
+        for stat in player.get("stats", [])
+        if stat.get("name") in PLAYER_STAT_NAMES
+    }
+    return {
+        "id": str(athlete.get("id", "")),
+        "name": name,
+        "shortName": athlete.get("shortName") or name,
+        "jersey": str(player.get("jersey") or athlete.get("jersey") or ""),
+        "jerseyImage": _jersey_image(athlete),
+        "headshot": str((athlete.get("headshot") or {}).get("href", "")),
+        "pos": str(position.get("abbreviation", "")),
+        "positionName": str(position.get("displayName") or position.get("name") or ""),
+        "formationPlace": str(player.get("formationPlace") or ""),
+        "starter": bool(player.get("starter")),
+        "subbedIn": bool(player.get("subbedIn")),
+        "subbedOut": bool(player.get("subbedOut")),
+        "eventBadges": _related_events(name, events),
+        "stats": stats,
+    }
+
+
+def _lineup(roster: Dict[str, Any], events: Optional[List[Dict[str, Any]]] = None) -> List[Dict[str, Any]]:
+    all_players = roster.get("roster", [])
+    players = [player for player in all_players if player.get("starter")]
     if not players:
-        players = roster.get("roster", [])[:11]
-    return [
-        {
-            "name": player.get("athlete", {}).get("displayName", ""),
-            "jersey": str(player.get("jersey") or player.get("athlete", {}).get("jersey") or ""),
-            "pos": str(player.get("position", {}).get("abbreviation") or player.get("athlete", {}).get("position", {}).get("abbreviation") or ""),
-        }
-        for player in players[:11]
-    ]
+        players = all_players[:11]
+    return [_player_data(player, events or []) for player in players[:11]]
+
+
+def _bench(roster: Dict[str, Any], events: Optional[List[Dict[str, Any]]] = None) -> List[Dict[str, Any]]:
+    players = [player for player in roster.get("roster", []) if not player.get("starter")]
+    return [_player_data(player, events or []) for player in players]
 
 
 def parse_match_detail(payload: Dict[str, Any]) -> Dict[str, Any]:
@@ -226,8 +298,10 @@ def parse_match_detail(payload: Dict[str, Any]) -> Dict[str, Any]:
     home_roster = rosters_by_team.get(home_id, {})
     away_roster = rosters_by_team.get(away_id, {})
     lineups = {
-        "home": _lineup(home_roster),
-        "away": _lineup(away_roster),
+        "home": _lineup(home_roster, events),
+        "away": _lineup(away_roster, events),
+        "homeBench": _bench(home_roster, events),
+        "awayBench": _bench(away_roster, events),
         "homeFormation": home_roster.get("formation", ""),
         "awayFormation": away_roster.get("formation", ""),
         "isOfficial": bool(home_roster or away_roster),

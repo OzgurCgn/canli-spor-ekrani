@@ -139,6 +139,65 @@ def test_rosters_and_stats_are_matched_by_team_id_not_array_order():
     assert result["lineups"]["awayFormation"] == "4-4-2"
 
 
+def test_visual_lineup_contains_pitch_data_bench_stats_and_event_badges():
+    payload = {
+        "header": {"competitions": [{"competitors": [
+            {"id": "h", "homeAway": "home"},
+            {"id": "a", "homeAway": "away"},
+        ]}]},
+        "keyEvents": [{
+            "clock": {"displayValue": "63'"},
+            "team": {"id": "h"},
+            "type": {"text": "Substitution"},
+            "participants": [
+                {"athlete": {"displayName": "Giren Oyuncu"}},
+                {"athlete": {"displayName": "Çıkan Oyuncu"}},
+            ],
+        }],
+        "rosters": [{
+            "team": {"id": "h"},
+            "formation": "4-2-3-1",
+            "roster": [
+                {
+                    "starter": True,
+                    "jersey": "8",
+                    "formationPlace": "7",
+                    "subbedOut": True,
+                    "position": {"abbreviation": "AM-R", "displayName": "Attacking Midfielder Right"},
+                    "athlete": {
+                        "id": "1",
+                        "displayName": "Çıkan Oyuncu",
+                        "shortName": "Ç. Oyuncu",
+                        "jerseyImages": [
+                            {"href": "light.png", "rel": ["full", "default"]},
+                            {"href": "dark.png", "rel": ["full", "dark"]},
+                        ],
+                    },
+                    "stats": [{"name": "totalShots", "displayValue": "3"}],
+                },
+                {
+                    "starter": False,
+                    "jersey": "19",
+                    "subbedIn": True,
+                    "position": {"abbreviation": "SUB", "displayName": "Substitute"},
+                    "athlete": {"id": "2", "displayName": "Giren Oyuncu", "shortName": "G. Oyuncu"},
+                },
+            ],
+        }],
+    }
+
+    lineups = parse_match_detail(payload)["lineups"]
+    starter = lineups["home"][0]
+    substitute = lineups["homeBench"][0]
+
+    assert starter["formationPlace"] == "7"
+    assert starter["jerseyImage"] == "dark.png"
+    assert starter["stats"]["totalShots"] == "3"
+    assert starter["eventBadges"] == [{"label": "↘ 63'", "tone": "sub-out", "title": "Oyundan çıktı"}]
+    assert substitute["subbedIn"] is True
+    assert substitute["eventBadges"] == [{"label": "↗ 63'", "tone": "sub-in", "title": "Oyuna girdi"}]
+
+
 def test_standings_parser_returns_dashboard_columns():
     payload = {
         "name": "Turkish Super Lig",

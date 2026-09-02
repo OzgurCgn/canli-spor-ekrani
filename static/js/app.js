@@ -365,20 +365,179 @@ function renderStats(stats) {
   elements.statsContainer.replaceChildren(...rows);
 }
 
-function renderPlayer(player) {
-  const row = node("div", "player-row");
-  row.append(node("span", "player-number", player.jersey || "-"), node("span", "", player.name || "-"), node("span", "player-position", player.pos || ""));
-  return row;
+const playerStatLabels = {
+  totalGoals: "Gol",
+  goalAssists: "Asist",
+  totalShots: "Şut",
+  shotsOnTarget: "İsabetli şut",
+  yellowCards: "Sarı kart",
+  redCards: "Kırmızı kart",
+  foulsCommitted: "Yaptığı faul",
+  foulsSuffered: "Maruz kaldığı faul",
+  ownGoals: "Kendi kalesine gol",
+};
+
+const playerPositionLabels = {
+  G: "Kaleci", GK: "Kaleci", LB: "Sol bek", RB: "Sağ bek",
+  CD: "Stoper", "CD-L": "Sol stoper", "CD-R": "Sağ stoper",
+  DM: "Defansif orta saha", CM: "Merkez orta saha", "CM-L": "Sol merkez orta saha", "CM-R": "Sağ merkez orta saha",
+  LM: "Sol orta saha", RM: "Sağ orta saha", AM: "Ofansif orta saha",
+  "AM-L": "Sol ofansif orta saha", "AM-R": "Sağ ofansif orta saha",
+  F: "Forvet", CF: "Santrfor", "CF-L": "Sol forvet", "CF-R": "Sağ forvet", SUB: "Yedek",
+};
+
+function playerPosition(player) {
+  return playerPositionLabels[String(player.pos || "").toUpperCase()] || player.positionName || player.pos || "";
+}
+
+function playerBand(player) {
+  const pos = String(player.pos || "").toUpperCase();
+  if (pos === "G" || pos.includes("GK")) return "goalkeeper";
+  if (pos.startsWith("AM") || pos.startsWith("CF") || pos.includes("W")) return "attacking";
+  if (pos === "F" || pos.includes("ST")) return "forward";
+  if (pos.includes("D") || pos === "LB" || pos === "RB") return "defense";
+  if (pos.includes("M")) return "midfield";
+  return "attacking";
+}
+
+function horizontalRank(player) {
+  const pos = String(player.pos || "").toUpperCase();
+  if (pos.endsWith("-L") || pos === "LB" || pos === "LM" || pos === "LW") return 0;
+  if (pos.endsWith("-R") || pos === "RB" || pos === "RM" || pos === "RW") return 2;
+  return 1;
+}
+
+function eventBadge(badge, compact = false) {
+  const item = node("span", `player-event-badge ${badge.tone || ""}${compact ? " compact" : ""}`, badge.label);
+  item.title = badge.title || "";
+  return item;
+}
+
+function playerKit(player, compact = false) {
+  const kit = node("span", `player-kit${compact ? " compact" : ""}`);
+  kit.append(node("span", "player-kit-fallback", player.jersey || "?"));
+  if (player.jerseyImage) kit.append(image(player.jerseyImage, "player-jersey-image", ""));
+  return kit;
+}
+
+function showPlayerDialog(player) {
+  const content = node("div", "player-dialog-body");
+  const hero = node("div", "player-dialog-hero");
+  const visual = player.headshot
+    ? image(player.headshot, "player-dialog-image headshot", `${player.name} fotoğrafı`)
+    : (player.jerseyImage
+      ? image(player.jerseyImage, "player-dialog-image", `${player.name} forması`)
+      : playerKit(player));
+  const identity = node("div", "player-dialog-identity");
+  const number = player.jersey ? `#${player.jersey}` : "";
+  const title = node("h3", "", player.name || "Oyuncu");
+  title.id = "playerDialogTitle";
+  identity.append(
+    node("span", "player-dialog-kicker", [number, playerPosition(player)].filter(Boolean).join(" • ")),
+    title,
+  );
+  const badges = node("div", "player-dialog-badges");
+  badges.append(...(player.eventBadges || []).map(badge => eventBadge(badge)));
+  if (badges.childNodes.length) identity.append(badges);
+  hero.append(visual, identity);
+  content.append(hero);
+
+  const statEntries = Object.entries(player.stats || {}).filter(([key]) => playerStatLabels[key]);
+  if (statEntries.length) {
+    const stats = node("div", "player-stat-grid");
+    for (const [key, value] of statEntries) {
+      const stat = node("div", "player-stat");
+      stat.append(node("strong", "", value), node("span", "", playerStatLabels[key]));
+      stats.append(stat);
+    }
+    content.append(stats);
+  } else {
+    content.append(emptyState("Bu oyuncu için maç istatistiği bulunmuyor."));
+  }
+  elements.playerDialogContent.replaceChildren(content);
+  if (!elements.playerDialog.open) elements.playerDialog.showModal();
+}
+
+function pitchPlayer(player) {
+  const button = node("button", "pitch-player");
+  button.type = "button";
+  button.setAttribute("aria-label", `${player.name} oyuncu kartını aç`);
+  button.append(playerKit(player));
+  const badges = node("span", "pitch-player-badges");
+  badges.append(...(player.eventBadges || []).map(badge => eventBadge(badge, true)));
+  if (badges.childNodes.length) button.append(badges);
+  button.append(node("span", "pitch-player-name", player.shortName || player.name));
+  button.addEventListener("click", () => showPlayerDialog(player));
+  return button;
+}
+
+function benchPlayer(player) {
+  const button = node("button", `bench-player${player.subbedIn ? " entered" : ""}`);
+  button.type = "button";
+  button.setAttribute("aria-label", `${player.name} oyuncu kartını aç`);
+  button.append(playerKit(player, true), node("span", "bench-player-name", player.shortName || player.name));
+  const badges = (player.eventBadges || []).map(badge => eventBadge(badge, true));
+  if (badges.length) button.append(...badges);
+  button.addEventListener("click", () => showPlayerDialog(player));
+  return button;
+}
+
+function lineupVisual(players, bench) {
+  if (!players.length) return emptyState("Kadro açıklanmadı.");
+  const content = node("div", "pitch-and-bench");
+  const pitch = node("div", "football-pitch");
+  pitch.append(
+    node("span", "pitch-halfway"),
+    node("span", "pitch-circle"),
+    node("span", "pitch-box top"),
+    node("span", "pitch-box bottom"),
+  );
+  for (const band of ["forward", "attacking", "midfield", "defense", "goalkeeper"]) {
+    const linePlayers = players
+      .filter(player => playerBand(player) === band)
+      .sort((a, b) => horizontalRank(a) - horizontalRank(b) || Number(a.formationPlace || 99) - Number(b.formationPlace || 99));
+    if (!linePlayers.length) continue;
+    const row = node("div", `pitch-row ${band}`);
+    row.style.gridTemplateColumns = `repeat(${linePlayers.length}, minmax(0, 1fr))`;
+    row.append(...linePlayers.map(pitchPlayer));
+    pitch.append(row);
+  }
+  content.append(pitch);
+
+  const benchBox = node("div", "bench-box");
+  const benchTitle = node("div", "bench-title");
+  benchTitle.append(node("strong", "", "Yedekler"), node("span", "", `${bench.length} oyuncu`));
+  benchBox.append(benchTitle);
+  if (bench.length) {
+    const benchList = node("div", "bench-list");
+    benchList.append(...bench.map(benchPlayer));
+    benchBox.append(benchList);
+  } else {
+    benchBox.append(emptyState("Yedek kadro bilgisi yok."));
+  }
+  content.append(benchBox);
+  return content;
+}
+
+function setMobileLineup(side) {
+  const homeActive = side === "home";
+  elements.lineupHomeTab.classList.toggle("active", homeActive);
+  elements.lineupAwayTab.classList.toggle("active", !homeActive);
+  elements.lineupHomeCol.classList.toggle("mobile-active", homeActive);
+  elements.lineupAwayCol.classList.toggle("mobile-active", !homeActive);
 }
 
 function renderLineups(lineups) {
   elements.lineupBadge.textContent = lineups.isOfficial ? "Resmi 11'ler" : "Kadro açıklanmadı";
   elements.lineupHomeForm.textContent = lineups.homeFormation || "";
   elements.lineupAwayForm.textContent = lineups.awayFormation || "";
-  const home = (lineups.home || []).map(renderPlayer);
-  const away = (lineups.away || []).map(renderPlayer);
-  elements.homeLineupList.replaceChildren(...(home.length ? home : [emptyState("Kadro açıklanmadı.")]));
-  elements.awayLineupList.replaceChildren(...(away.length ? away : [emptyState("Kadro açıklanmadı.")]));
+  elements.lineupHomeTab.textContent = elements.lineupHomeName.textContent;
+  elements.lineupAwayTab.textContent = elements.lineupAwayName.textContent;
+  const home = lineups.home || [];
+  const away = lineups.away || [];
+  elements.homeLineupList.replaceChildren(lineupVisual(home, lineups.homeBench || []));
+  elements.awayLineupList.replaceChildren(lineupVisual(away, lineups.awayBench || []));
+  setMobileLineup("home");
 }
 
 function renderTicker() {
@@ -469,7 +628,8 @@ function bindElements() {
     "stageAwayLogo", "stageHome", "stageAway", "stageScore", "homeEventsList", "awayEventsList", "stageTag",
     "timeline", "eventCount", "statsContainer", "lineupBadge", "lineupHomeName", "lineupAwayName", "lineupHomeForm",
     "lineupAwayForm", "homeLineupList", "awayLineupList", "venueText", "refereeText", "leagueSelect", "matchesTab",
-    "standingsTab", "liveFilter", "matchFeed", "standingsPanel", "tickerTrack", "toast",
+    "standingsTab", "liveFilter", "matchFeed", "standingsPanel", "tickerTrack", "toast", "lineupHomeTab",
+    "lineupAwayTab", "lineupHomeCol", "lineupAwayCol", "playerDialog", "playerDialogClose", "playerDialogContent",
   ];
   for (const id of ids) elements[id] = document.getElementById(id);
 }
@@ -496,6 +656,12 @@ function bindEvents() {
   });
   elements.matchesTab.addEventListener("click", () => setView("matches"));
   elements.standingsTab.addEventListener("click", () => setView("standings"));
+  elements.lineupHomeTab.addEventListener("click", () => setMobileLineup("home"));
+  elements.lineupAwayTab.addEventListener("click", () => setMobileLineup("away"));
+  elements.playerDialogClose.addEventListener("click", () => elements.playerDialog.close());
+  elements.playerDialog.addEventListener("click", event => {
+    if (event.target === elements.playerDialog) elements.playerDialog.close();
+  });
 }
 
 function init() {

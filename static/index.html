@@ -61,14 +61,18 @@
 
         <section class="detail-card lineups-card">
           <div class="card-title"><span>İlk 11 / Kadrolar</span><span class="card-badge" id="lineupBadge">Kadro</span></div>
+          <div class="lineup-team-tabs" aria-label="Kadro takımı seçimi">
+            <button class="lineup-team-tab active" id="lineupHomeTab" type="button">Ev Sahibi</button>
+            <button class="lineup-team-tab" id="lineupAwayTab" type="button">Deplasman</button>
+          </div>
           <div class="lineups-container">
-            <div class="lineup-col">
+            <div class="lineup-col mobile-active" id="lineupHomeCol">
               <div class="lineup-team-title"><span id="lineupHomeName">Ev Sahibi</span><span id="lineupHomeForm"></span></div>
-              <div class="player-list" id="homeLineupList"></div>
+              <div class="lineup-visual" id="homeLineupList"></div>
             </div>
-            <div class="lineup-col">
+            <div class="lineup-col" id="lineupAwayCol">
               <div class="lineup-team-title"><span id="lineupAwayName">Deplasman</span><span id="lineupAwayForm"></span></div>
-              <div class="player-list" id="awayLineupList"></div>
+              <div class="lineup-visual" id="awayLineupList"></div>
             </div>
           </div>
         </section>
@@ -108,6 +112,11 @@
       <div class="sidebar-content standings-panel" id="standingsPanel" role="tabpanel" hidden></div>
     </aside>
   </div>
+
+  <dialog class="player-dialog" id="playerDialog" aria-labelledby="playerDialogTitle">
+    <button class="dialog-close" id="playerDialogClose" type="button" aria-label="Oyuncu kartını kapat">×</button>
+    <div id="playerDialogContent"></div>
+  </dialog>
 
   <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
   <footer class="ticker-container">
