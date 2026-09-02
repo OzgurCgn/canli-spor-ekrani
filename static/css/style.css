@@ -338,15 +338,16 @@ button { color: inherit; }
 .pitch-box.top { top: -1px; border-top: 0; }
 .pitch-box.bottom { bottom: -1px; border-bottom: 0; }
 .pitch-row { position: relative; z-index: 2; display: grid; align-items: center; gap: 3px; }
-.pitch-player { position: relative; min-width: 0; padding: 2px; display: grid; justify-items: center; gap: 2px; border: 0; background: transparent; cursor: pointer; }
+.pitch-player { min-width: 0; padding: 2px; display: grid; justify-items: center; gap: 2px; border: 0; background: transparent; cursor: pointer; }
 .pitch-player:hover .player-kit, .pitch-player:focus-visible .player-kit { transform: translateY(-3px) scale(1.06); filter: drop-shadow(0 7px 7px rgba(0, 0, 0, .35)); }
+.pitch-player-visual { position: relative; width: 64px; min-height: 54px; display: grid; place-items: center; }
 .player-kit { position: relative; width: 54px; height: 54px; display: grid; place-items: center; transition: transform .16s, filter .16s; }
 .player-kit.compact { width: 31px; height: 31px; flex: 0 0 31px; }
 .player-kit-fallback { width: 38px; height: 38px; display: grid; place-items: center; border: 2px solid rgba(255, 255, 255, .82); border-radius: 50%; background: #172338; color: #fff; font-size: .72rem; font-weight: 900; box-shadow: 0 4px 9px rgba(0, 0, 0, .32); }
 .player-kit.compact .player-kit-fallback { width: 28px; height: 28px; font-size: .62rem; }
 .player-jersey-image { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; filter: drop-shadow(0 4px 4px rgba(0, 0, 0, .34)); }
 .pitch-player-name { max-width: 86px; padding: 3px 5px; overflow: hidden; border-radius: 5px; background: rgba(4, 12, 10, .74); color: #fff; font-size: .59rem; font-weight: 850; line-height: 1.1; text-overflow: ellipsis; white-space: nowrap; box-shadow: 0 2px 6px rgba(0, 0, 0, .2); }
-.pitch-player-badges { position: absolute; z-index: 4; top: -1px; right: 1px; display: grid; gap: 2px; }
+.pitch-player-badges { pointer-events: none; position: absolute; z-index: 4; top: -6px; right: -14px; display: grid; justify-items: start; gap: 2px; }
 .player-event-badge { padding: 3px 6px; border: 1px solid rgba(255, 255, 255, .22); border-radius: 999px; background: #172338; color: #fff; font-size: .64rem; font-weight: 900; white-space: nowrap; }
 .player-event-badge.compact { padding: 2px 4px; font-size: .52rem; }
 .player-event-badge.goal { background: #eaf9ef; color: #0d5d2f; }

@@ -415,8 +415,11 @@ function eventBadge(badge, compact = false) {
 
 function playerKit(player, compact = false) {
   const kit = node("span", `player-kit${compact ? " compact" : ""}`);
-  kit.append(node("span", "player-kit-fallback", player.jersey || "?"));
-  if (player.jerseyImage) kit.append(image(player.jerseyImage, "player-jersey-image", ""));
+  if (player.jerseyImage) {
+    kit.append(image(player.jerseyImage, "player-jersey-image", ""));
+  } else {
+    kit.append(node("span", "player-kit-fallback", player.jersey || "?"));
+  }
   return kit;
 }
 
@@ -462,11 +465,12 @@ function pitchPlayer(player) {
   const button = node("button", "pitch-player");
   button.type = "button";
   button.setAttribute("aria-label", `${player.name} oyuncu kartını aç`);
-  button.append(playerKit(player));
+  const visual = node("span", "pitch-player-visual");
+  visual.append(playerKit(player));
   const badges = node("span", "pitch-player-badges");
   badges.append(...(player.eventBadges || []).map(badge => eventBadge(badge, true)));
-  if (badges.childNodes.length) button.append(badges);
-  button.append(node("span", "pitch-player-name", player.shortName || player.name));
+  if (badges.childNodes.length) visual.append(badges);
+  button.append(visual, node("span", "pitch-player-name", player.shortName || player.name));
   button.addEventListener("click", () => showPlayerDialog(player));
   return button;
 }
