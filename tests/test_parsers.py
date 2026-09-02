@@ -32,6 +32,25 @@ def test_fixture_parser_includes_logos_and_date():
     assert match["score"] == "vs"
 
 
+def test_fixture_parser_uses_local_logo_overrides_for_missing_espn_assets():
+    payload = {
+        "events": [{
+            "id": "missing-logos",
+            "date": "2026-08-31T17:00Z",
+            "status": {"type": {"state": "post", "shortDetail": "FT"}},
+            "competitions": [{"competitors": [
+                {"id": "132335", "homeAway": "home", "score": "2", "team": {"id": "132335", "displayName": "Amed SFK"}},
+                {"id": "21446", "homeAway": "away", "score": "1", "team": {"id": "21446", "displayName": "Al-Faisaly"}},
+            ]}],
+        }]
+    }
+
+    match = parse_fixtures(payload, LEAGUE)[0]
+
+    assert match["homeLogo"] == "/static/images/team-logos/amed-sfk.png"
+    assert match["awayLogo"] == "/static/images/team-logos/al-faisaly.png"
+
+
 def test_all_fixtures_combines_leagues_and_prioritizes_live_matches():
     service = ESPNService()
 

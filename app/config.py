@@ -36,6 +36,11 @@ TEAM_NAME_FIXES = {
     "Sporting CP": "Sporting Lizbon",
 }
 
+TEAM_LOGO_OVERRIDES = {
+    "132335": "/static/images/team-logos/amed-sfk.png",
+    "21446": "/static/images/team-logos/al-faisaly.png",
+}
+
 
 def clean_team_name(name: str) -> str:
     return TEAM_NAME_FIXES.get(name, name)

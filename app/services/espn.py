@@ -4,7 +4,7 @@ from typing import Any, Dict, List, Optional
 
 import httpx
 
-from app.config import clean_team_name
+from app.config import TEAM_LOGO_OVERRIDES, clean_team_name
 from app.utils.formatting import format_match_time, parse_espn_datetime
 
 
@@ -28,10 +28,12 @@ class TTLCache:
 
 
 def _logo_url(team: Dict[str, Any]) -> str:
+    team_id = str(team.get("id") or "")
+    if team_id in TEAM_LOGO_OVERRIDES:
+        return TEAM_LOGO_OVERRIDES[team_id]
     logos = team.get("logos") or []
     if logos and logos[0].get("href"):
         return logos[0]["href"]
-    team_id = team.get("id")
     return f"https://a.espncdn.com/i/teamlogos/soccer/500/{team_id}.png" if team_id else ""
 
 
