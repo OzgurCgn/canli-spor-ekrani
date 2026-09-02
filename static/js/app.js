@@ -413,6 +413,23 @@ function eventBadge(badge, compact = false) {
   return item;
 }
 
+function pitchEventBadges(badges = []) {
+  const groups = new Map();
+  for (const badge of badges) {
+    const marker = String(badge.label || "").trim().split(/\s+/)[0];
+    const key = `${badge.tone || ""}:${marker}`;
+    const group = groups.get(key) || { marker, tone: badge.tone || "", labels: [], titles: [] };
+    group.labels.push(badge.label);
+    if (badge.title) group.titles.push(badge.title);
+    groups.set(key, group);
+  }
+  return [...groups.values()].map(group => eventBadge({
+    label: group.labels.length > 1 ? `${group.marker}×${group.labels.length}` : group.marker,
+    tone: group.tone,
+    title: group.labels.join(" • "),
+  }, true));
+}
+
 function playerKit(player, compact = false) {
   const kit = node("span", `player-kit${compact ? " compact" : ""}`);
   if (player.jerseyImage) {
@@ -468,9 +485,8 @@ function pitchPlayer(player) {
   const visual = node("span", "pitch-player-visual");
   visual.append(playerKit(player));
   const badges = node("span", "pitch-player-badges");
-  badges.append(...(player.eventBadges || []).map(badge => eventBadge(badge, true)));
-  if (badges.childNodes.length) visual.append(badges);
-  button.append(visual, node("span", "pitch-player-name", player.shortName || player.name));
+  badges.append(...pitchEventBadges(player.eventBadges || []));
+  button.append(visual, node("span", "pitch-player-name", player.shortName || player.name), badges);
   button.addEventListener("click", () => showPlayerDialog(player));
   return button;
 }
