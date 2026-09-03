@@ -2,6 +2,8 @@
 
 CanlıSpor; farklı liglerdeki fikstürleri, canlı skorları, maç olaylarını, kadroları, istatistikleri ve puan durumunu tek ekranda sunan responsive bir futbol dashboard'udur. FastAPI backend, ESPN'in herkese açık web uç noktalarından aldığı veriyi normalize eder; framework kullanmayan frontend ise veriyi güvenli DOM işlemleriyle gösterir.
 
+**[Canlı demoyu aç](https://canli-spor-ekrani.onrender.com/)**
+
 ## Öne çıkan özellikler
 
 - 12 lig için canlı skor ve günlük fikstür
@@ -11,9 +13,17 @@ CanlıSpor; farklı liglerdeki fikstürleri, canlı skorları, maç olaylarını
 - Maç istatistikleri, resmi ilk 11'ler, diziliş, stadyum ve hakem bilgisi
 - Lig puan durumu
 - Sadece canlı maçları gösteren filtre
+- Takım ve lig favorileri; favorilere özel maç filtresi
+- Takım profili, lig derecesi, form, yaklaşan maçlar ve sezon kadrosu
+- Sekmeli maç merkezi ve 15 gelişmiş takım istatistiği
+- Tarih, lig ve maçı koruyan paylaşılabilir bağlantılar
+- İsteğe bağlı canlı gol bildirimleri
+- Telefona ve masaüstüne kurulabilen PWA desteği
 - Masaüstü, tablet ve mobil ekranlara uyumlu tasarım
-- 15 saniyelik maç verisi ve 5 dakikalık puan durumu cache'i
+- Bağlantı yeniden kullanımı, otomatik tekrar deneme ve stale-cache geri dönüşü
+- 15 saniyelik maç verisi ve 5 dakikalık puan durumu/takım cache'i
 - API hata durumları, loading ekranları ve otomatik parser testleri
+- GitHub Actions üzerinde Python ve JavaScript testleri
 
 ## Desteklenen ligler
 
@@ -29,7 +39,8 @@ canli-spor-ekrani/
 │   ├── routes/
 │   │   ├── fixtures.py         # Günlük fikstür
 │   │   ├── matches.py          # Maç ayrıntısı
-│   │   └── standings.py        # Puan durumu
+│   │   ├── standings.py        # Puan durumu
+│   │   └── teams.py            # Takım profili, form ve kadro
 │   ├── services/
 │   │   └── espn.py             # HTTP istemcisi, cache ve veri parser'ları
 │   └── utils/
@@ -37,13 +48,24 @@ canli-spor-ekrani/
 ├── static/
 │   ├── css/style.css
 │   ├── js/app.js
-│   └── index.html
+│   ├── index.html
+│   ├── manifest.webmanifest
+│   └── sw.js
 ├── tests/
+├── .github/workflows/ci.yml
 ├── Dockerfile
 └── requirements.txt
 ```
 
 Frontend → FastAPI → ESPN akışında dış veri doğrudan tarayıcıya aktarılmaz. Backend, takım taraflarını ID üzerinden eşleştirir, olayları standart bir modele dönüştürür ve kısa süreli bellekte önbelleğe alır.
+
+```mermaid
+flowchart LR
+    UI[Responsive PWA] --> API[FastAPI]
+    API --> Cache[TTL + stale cache]
+    Cache --> ESPN[ESPN web endpoints]
+    API --> Team[Match, standings and team parsers]
+```
 
 ## Yerel kurulum
 
@@ -87,6 +109,7 @@ docker run --rm -p 8000:8000 canlispor
 | `GET` | `/api/fixtures?league=superlig&date=2026-09-01` | Seçilen günün maçları |
 | `GET` | `/api/match-detail?event_id=...&league_slug=tur.1` | Olay, kadro ve istatistikler |
 | `GET` | `/api/standings?league=superlig` | Lig puan durumu |
+| `GET` | `/api/team-detail?team_id=432&league_slug=tur.1` | Takım profili, form, fikstür ve kadro |
 | `GET` | `/api/health` | Sağlık kontrolü |
 
 ## Testler
@@ -94,9 +117,10 @@ docker run --rm -p 8000:8000 canlispor
 ```bash
 pip install -r requirements-dev.txt
 pytest -q
+node --test tests/frontend.test.mjs
 ```
 
-Testler özellikle kendi kalesine golün doğru tarafa yazılmasını ve ESPN dizileri ters sırada geldiğinde kadro/istatistiklerin takım ID'siyle doğru eşleşmesini kontrol eder.
+Testler; kendi kalesine golün doğru tarafa yazılmasını, takım ID eşlemesini, gelişmiş istatistikleri, takım profili parser'ını, paylaşılabilir URL durumunu, favorileri ve diziliş sırasını kontrol eder. Aynı kontroller her push ve pull request'te GitHub Actions tarafından çalıştırılır.
 
 ## Veri kaynağı notu
 

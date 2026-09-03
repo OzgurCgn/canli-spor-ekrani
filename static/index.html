@@ -4,13 +4,20 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="description" content="Canlı futbol skorları, maç detayları, kadrolar ve puan durumu.">
+  <meta name="theme-color" content="#0b1220">
   <title>CanlıSpor | Canlı Futbol Ekranı</title>
+  <link rel="manifest" href="/manifest.webmanifest">
+  <link rel="icon" href="/images/app-icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="/images/app-icon-192.png">
   <link rel="stylesheet" href="/css/style.css">
 </head>
 <body>
   <header class="topbar">
     <a class="brand" href="/" aria-label="CanlıSpor ana sayfa">CANLI<span>SPOR</span></a>
-    <div class="live-badge"><span class="pulse"></span><span id="liveCount">CANLI AKIŞ</span></div>
+    <div class="topbar-actions">
+      <button class="notification-button" id="notificationButton" type="button" aria-pressed="false" title="Gol bildirimleri">🔔 <span>Bildirim</span></button>
+      <div class="live-badge"><span class="pulse"></span><span id="liveCount">CANLI AKIŞ</span></div>
+    </div>
   </header>
 
   <nav class="date-nav" aria-label="Maç tarihi seçimi">
@@ -31,35 +38,59 @@
           <div class="league-meta" id="stageMeta"></div>
           <div class="scoreboard">
             <div class="team-block">
-              <img class="team-logo stage-logo" id="stageHomeLogo" alt="">
-              <div class="team-name" id="stageHome">-</div>
+              <button class="team-profile-button" id="stageHomeButton" type="button" aria-label="Ev sahibi takım detayını aç">
+                <img class="team-logo stage-logo" id="stageHomeLogo" alt="">
+                <span class="team-name" id="stageHome">-</span>
+              </button>
+              <button class="team-favorite-button" id="stageHomeFavorite" type="button" aria-pressed="false" aria-label="Ev sahibi takımı favorilere ekle">☆</button>
             </div>
             <div class="score-display" id="stageScore">-</div>
             <div class="team-block">
-              <img class="team-logo stage-logo" id="stageAwayLogo" alt="">
-              <div class="team-name" id="stageAway">-</div>
+              <button class="team-profile-button" id="stageAwayButton" type="button" aria-label="Deplasman takımı detayını aç">
+                <img class="team-logo stage-logo" id="stageAwayLogo" alt="">
+                <span class="team-name" id="stageAway">-</span>
+              </button>
+              <button class="team-favorite-button" id="stageAwayFavorite" type="button" aria-pressed="false" aria-label="Deplasman takımını favorilere ekle">☆</button>
             </div>
           </div>
           <div class="scorers-summary-grid">
             <div class="team-events-col" id="homeEventsList"></div>
             <div class="team-events-col away-col" id="awayEventsList"></div>
           </div>
-          <div class="match-tag" id="stageTag">BEKLENİYOR</div>
+          <div class="stage-actions">
+            <div class="match-tag" id="stageTag">BEKLENİYOR</div>
+            <button class="share-button" id="copyLinkButton" type="button">🔗 Bağlantıyı kopyala</button>
+          </div>
         </div>
       </section>
 
+      <nav class="match-detail-tabs" id="matchDetailTabs" aria-label="Maç detay bölümleri" hidden>
+        <button class="match-detail-tab active" type="button" data-detail-tab="overview">Özet</button>
+        <button class="match-detail-tab" type="button" data-detail-tab="timeline">Maç Akışı</button>
+        <button class="match-detail-tab" type="button" data-detail-tab="lineups">Kadrolar</button>
+        <button class="match-detail-tab" type="button" data-detail-tab="stats">İstatistik</button>
+      </nav>
+
       <div class="details-grid" id="detailsGrid" hidden>
-        <section class="detail-card timeline-card">
+        <section class="detail-card match-info-card" data-detail-panel="overview">
+          <div class="card-title"><span>Maç Bilgisi</span></div>
+          <div class="match-info-grid">
+            <div><span class="info-label">Stadyum</span><strong id="venueText">-</strong></div>
+            <div><span class="info-label">Hakem</span><strong id="refereeText">-</strong></div>
+          </div>
+        </section>
+
+        <section class="detail-card timeline-card" data-detail-panel="timeline" hidden>
           <div class="card-title"><span>Maç Akışı</span><span class="card-badge" id="eventCount">0 olay</span></div>
           <div class="timeline" id="timeline"><div class="empty-state compact">Maç olayı bulunamadı.</div></div>
         </section>
 
-        <section class="detail-card">
+        <section class="detail-card" data-detail-panel="stats" hidden>
           <div class="card-title"><span>Takım Karşılaştırması</span></div>
           <div class="stats-list" id="statsContainer"><div class="empty-state compact">İstatistik bulunamadı.</div></div>
         </section>
 
-        <section class="detail-card lineups-card">
+        <section class="detail-card lineups-card" data-detail-panel="lineups" hidden>
           <div class="card-title"><span>İlk 11 / Kadrolar</span><span class="card-badge" id="lineupBadge">Kadro</span></div>
           <div class="lineup-team-tabs" aria-label="Kadro takımı seçimi">
             <button class="lineup-team-tab active" id="lineupHomeTab" type="button">Ev Sahibi</button>
@@ -77,16 +108,13 @@
           </div>
         </section>
 
-        <section class="detail-card match-info-card">
-          <div><span class="info-label">Stadyum</span><strong id="venueText">-</strong></div>
-          <div><span class="info-label">Hakem</span><strong id="refereeText">-</strong></div>
-        </section>
       </div>
     </main>
 
     <aside class="sidebar">
       <div class="sidebar-controls">
         <label class="sr-only" for="leagueSelect">Lig seç</label>
+        <div class="league-picker-row">
         <select class="league-dropdown" id="leagueSelect">
           <option value="all">🌍 Tüm Ligler</option>
           <option value="superlig">🇹🇷 Trendyol Süper Lig</option>
@@ -102,11 +130,16 @@
           <option value="uel">🏆 UEFA Avrupa Ligi</option>
           <option value="uecl">🟢 UEFA Konferans Ligi</option>
         </select>
+        <button class="league-favorite-button" id="favoriteLeagueButton" type="button" aria-pressed="false" aria-label="Seçili ligi favorilere ekle" title="Seçili ligi favorilere ekle">☆</button>
+        </div>
         <div class="view-tabs" role="tablist" aria-label="Görünüm">
           <button class="tab-button active" id="matchesTab" type="button" role="tab">Maçlar</button>
           <button class="tab-button" id="standingsTab" type="button" role="tab">Puan Durumu</button>
         </div>
-        <button class="filter-button" id="liveFilter" type="button" aria-pressed="false"><span class="filter-dot"></span> Sadece canlı maçlar</button>
+        <div class="filter-row">
+          <button class="filter-button" id="liveFilter" type="button" aria-pressed="false"><span class="filter-dot"></span> Canlı</button>
+          <button class="filter-button" id="favoritesFilter" type="button" aria-pressed="false">★ Favoriler</button>
+        </div>
       </div>
       <div class="sidebar-content" id="matchFeed" role="tabpanel"></div>
       <div class="sidebar-content standings-panel" id="standingsPanel" role="tabpanel" hidden></div>
@@ -116,6 +149,11 @@
   <dialog class="player-dialog" id="playerDialog" aria-labelledby="playerDialogTitle">
     <button class="dialog-close" id="playerDialogClose" type="button" aria-label="Oyuncu kartını kapat">×</button>
     <div id="playerDialogContent"></div>
+  </dialog>
+
+  <dialog class="team-dialog" id="teamDialog" aria-labelledby="teamDialogTitle">
+    <button class="dialog-close" id="teamDialogClose" type="button" aria-label="Takım detayını kapat">×</button>
+    <div id="teamDialogContent"></div>
   </dialog>
 
   <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>

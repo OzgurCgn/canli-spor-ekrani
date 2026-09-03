@@ -1,11 +1,12 @@
 import asyncio
 import time
-from typing import Any, Dict, List, Optional
+from datetime import datetime, timedelta
+from typing import Any, Awaitable, Callable, Dict, List, Optional
 
 import httpx
 
 from app.config import TEAM_LOGO_OVERRIDES, clean_team_name
-from app.utils.formatting import format_match_time, parse_espn_datetime
+from app.utils.formatting import ISTANBUL, format_match_time, parse_espn_datetime
 
 
 class ESPNServiceError(RuntimeError):
@@ -19,6 +20,12 @@ class TTLCache:
     def get(self, key: str, ttl: int) -> Optional[Any]:
         item = self._items.get(key)
         if item and time.monotonic() - item["created_at"] < ttl:
+            return item["value"]
+        return None
+
+    def get_stale(self, key: str, max_age: int) -> Optional[Any]:
+        item = self._items.get(key)
+        if item and time.monotonic() - item["created_at"] < max_age:
             return item["value"]
         self._items.pop(key, None)
         return None
@@ -68,6 +75,8 @@ def parse_fixtures(payload: Dict[str, Any], league: Dict[str, str]) -> List[Dict
                 "awayTeam": clean_team_name(away_team.get("displayName", "Deplasman")),
                 "homeLogo": _logo_url(home_team),
                 "awayLogo": _logo_url(away_team),
+                "homeScore": str(home.get("score", "0")),
+                "awayScore": str(away.get("score", "0")),
                 "score": score,
                 "status": time_meta["type"],
                 "minute": time_meta["display"],
@@ -181,6 +190,10 @@ PLAYER_STAT_NAMES = {
     "foulsCommitted",
     "foulsSuffered",
     "ownGoals",
+    "offsides",
+    "saves",
+    "goalsConceded",
+    "shotsFaced",
 }
 
 
@@ -290,8 +303,18 @@ def parse_match_detail(payload: Dict[str, Any]) -> Dict[str, Any]:
         ("possessionPct", "Topla Oynama (%)"),
         ("totalShots", "Toplam Şut"),
         ("shotsOnTarget", "İsabetli Şut"),
+        ("blockedShots", "Bloklanan Şut"),
         ("wonCorners", "Korner"),
+        ("saves", "Kurtarış"),
+        ("totalPasses", "Toplam Pas"),
+        ("passPct", "Pas İsabeti (%)"),
+        ("totalTackles", "Top Kapma"),
+        ("interceptions", "Pas Arası"),
+        ("totalClearance", "Uzaklaştırma"),
+        ("offsides", "Ofsayt"),
         ("foulsCommitted", "Faul"),
+        ("yellowCards", "Sarı Kart"),
+        ("redCards", "Kırmızı Kart"),
     ):
         if key in home_stats or key in away_stats:
             stats.append({"title": title, "home": home_stats.get(key, "-"), "away": away_stats.get(key, "-")})
@@ -333,6 +356,7 @@ def parse_standings(payload: Dict[str, Any]) -> Dict[str, Any]:
             rows.append(
                 {
                     "rank": values.get("rank", "-"),
+                    "teamId": str(team.get("id", "")),
                     "team": clean_team_name(team.get("displayName", "Bilinmeyen Takım")),
                     "logo": _logo_url(team),
                     "played": values.get("gamesPlayed", "-"),
@@ -347,35 +371,177 @@ def parse_standings(payload: Dict[str, Any]) -> Dict[str, Any]:
     return {"league": payload.get("name", "Puan Durumu"), "groups": groups}
 
 
+def _record_values(team: Dict[str, Any]) -> Dict[str, Any]:
+    items = team.get("record", {}).get("items", [])
+    stats = items[0].get("stats", []) if items else []
+    return {stat.get("name"): stat.get("value", stat.get("displayValue", 0)) for stat in stats}
+
+
+def _team_match(match: Dict[str, Any], team_id: str) -> Dict[str, Any]:
+    is_home = match.get("homeId") == team_id
+    team_score = match.get("homeScore") if is_home else match.get("awayScore")
+    opponent_score = match.get("awayScore") if is_home else match.get("homeScore")
+    result = ""
+    if match.get("status") == "FT":
+        try:
+            result = "G" if int(team_score) > int(opponent_score) else ("M" if int(team_score) < int(opponent_score) else "B")
+        except (TypeError, ValueError):
+            result = ""
+    return {
+        "id": match.get("id", ""),
+        "league": match.get("league", ""),
+        "leagueSlug": match.get("leagueSlug", ""),
+        "opponentId": match.get("awayId") if is_home else match.get("homeId"),
+        "opponent": match.get("awayTeam") if is_home else match.get("homeTeam"),
+        "opponentLogo": match.get("awayLogo") if is_home else match.get("homeLogo"),
+        "isHome": is_home,
+        "score": match.get("score", "vs"),
+        "status": match.get("status", "NS"),
+        "time": match.get("time", ""),
+        "fullDate": match.get("fullDate", ""),
+        "matchDate": match.get("matchDate", ""),
+        "startTime": match.get("startTime", ""),
+        "result": result,
+    }
+
+
+def parse_team_detail(
+    team_payload: Dict[str, Any],
+    roster_payload: Dict[str, Any],
+    fixtures_payload: Dict[str, Any],
+    league: Dict[str, str],
+) -> Dict[str, Any]:
+    team = team_payload.get("team", {})
+    team_id = str(team.get("id", ""))
+    record = _record_values(team)
+    all_matches = [
+        _team_match(match, team_id)
+        for match in parse_fixtures(fixtures_payload, league)
+        if team_id in (match.get("homeId"), match.get("awayId"))
+    ]
+    recent = sorted(
+        (match for match in all_matches if match["status"] == "FT"),
+        key=lambda match: match["startTime"],
+        reverse=True,
+    )[:5]
+    upcoming = sorted(
+        (match for match in all_matches if match["status"] != "FT"),
+        key=lambda match: match["startTime"],
+    )[:3]
+    squad = []
+    for athlete in roster_payload.get("athletes", []):
+        position = athlete.get("position", {}) or {}
+        squad.append({
+            "id": str(athlete.get("id", "")),
+            "name": athlete.get("displayName", ""),
+            "shortName": athlete.get("shortName") or athlete.get("displayName", ""),
+            "jersey": str(athlete.get("jersey") or ""),
+            "position": position.get("abbreviation", ""),
+            "positionName": position.get("displayName", ""),
+            "headshot": str((athlete.get("headshot") or {}).get("href", "")),
+            "age": athlete.get("age"),
+            "country": athlete.get("citizenship", ""),
+        })
+
+    return {
+        "team": {
+            "id": team_id,
+            "name": clean_team_name(team.get("displayName", "Bilinmeyen Takım")),
+            "abbreviation": team.get("abbreviation", ""),
+            "logo": _logo_url(team),
+            "color": team.get("color", ""),
+            "alternateColor": team.get("alternateColor", ""),
+            "league": league["name"],
+            "leagueSlug": league["slug"],
+        },
+        "record": {
+            "rank": int(record.get("rank", 0) or 0),
+            "played": int(record.get("gamesPlayed", 0) or 0),
+            "wins": int(record.get("wins", 0) or 0),
+            "draws": int(record.get("ties", 0) or 0),
+            "losses": int(record.get("losses", 0) or 0),
+            "goalsFor": int(record.get("pointsFor", 0) or 0),
+            "goalsAgainst": int(record.get("pointsAgainst", 0) or 0),
+            "goalDifference": int(record.get("pointDifferential", 0) or 0),
+            "points": int(record.get("points", 0) or 0),
+        },
+        "recent": recent,
+        "upcoming": upcoming,
+        "squad": squad,
+    }
+
+
 class ESPNService:
     SCOREBOARD_URL = "https://site.api.espn.com/apis/site/v2/sports/soccer/{slug}/scoreboard"
     SUMMARY_URL = "https://site.api.espn.com/apis/site/v2/sports/soccer/{slug}/summary"
     STANDINGS_URL = "https://site.api.espn.com/apis/v2/sports/soccer/{slug}/standings"
+    TEAM_URL = "https://site.api.espn.com/apis/site/v2/sports/soccer/{slug}/teams/{team_id}"
+    ROSTER_URL = "https://site.api.espn.com/apis/site/v2/sports/soccer/{slug}/teams/{team_id}/roster"
 
     def __init__(self) -> None:
         self.cache = TTLCache()
+        self._client: Optional[httpx.AsyncClient] = None
+        self._locks: Dict[str, asyncio.Lock] = {}
+
+    def _client_instance(self) -> httpx.AsyncClient:
+        if self._client is None or self._client.is_closed:
+            self._client = httpx.AsyncClient(timeout=12.0, follow_redirects=True)
+        return self._client
+
+    async def close(self) -> None:
+        if self._client is not None and not self._client.is_closed:
+            await self._client.aclose()
 
     async def _fetch_json(self, url: str, params: Optional[Dict[str, str]] = None) -> Dict[str, Any]:
-        try:
-            async with httpx.AsyncClient(timeout=12.0, follow_redirects=True) as client:
+        last_error: Optional[Exception] = None
+        for attempt in range(3):
+            try:
+                client = self._client_instance()
                 response = await client.get(url, params=params)
                 response.raise_for_status()
                 return response.json()
-        except (httpx.HTTPError, ValueError, ImportError) as exc:
-            raise ESPNServiceError("ESPN verisine şu anda ulaşılamıyor.") from exc
+            except (httpx.HTTPError, ValueError, ImportError) as exc:
+                last_error = exc
+                if isinstance(exc, httpx.HTTPStatusError) and exc.response.status_code < 500 and exc.response.status_code != 429:
+                    break
+                if attempt < 2:
+                    await asyncio.sleep(0.25 * (2 ** attempt))
+        raise ESPNServiceError("ESPN verisine şu anda ulaşılamıyor.") from last_error
+
+    async def _cached(
+        self,
+        key: str,
+        ttl: int,
+        loader: Callable[[], Awaitable[Dict[str, Any]]],
+        stale_ttl: int = 1800,
+    ) -> Dict[str, Any]:
+        cached = self.cache.get(key, ttl)
+        if cached is not None:
+            return cached
+        lock = self._locks.setdefault(key, asyncio.Lock())
+        async with lock:
+            cached = self.cache.get(key, ttl)
+            if cached is not None:
+                return cached
+            try:
+                result = await loader()
+            except ESPNServiceError:
+                stale = self.cache.get_stale(key, stale_ttl)
+                if stale is not None:
+                    return stale
+                raise
+            self.cache.set(key, result)
+            return result
 
     async def fixtures(self, league: Dict[str, str], selected_date: str) -> Dict[str, Any]:
         key = f"fixtures:{league['slug']}:{selected_date}"
-        cached = self.cache.get(key, 15)
-        if cached is not None:
-            return cached
-        payload = await self._fetch_json(
-            self.SCOREBOARD_URL.format(slug=league["slug"]),
-            {"dates": selected_date.replace("-", "")},
-        )
-        result = {"league": league["name"], "date": selected_date, "matches": parse_fixtures(payload, league)}
-        self.cache.set(key, result)
-        return result
+        async def load() -> Dict[str, Any]:
+            payload = await self._fetch_json(
+                self.SCOREBOARD_URL.format(slug=league["slug"]),
+                {"dates": selected_date.replace("-", "")},
+            )
+            return {"league": league["name"], "date": selected_date, "matches": parse_fixtures(payload, league)}
+        return await self._cached(key, 15, load)
 
     async def all_fixtures(self, leagues: List[Dict[str, str]], selected_date: str) -> Dict[str, Any]:
         results = await asyncio.gather(
@@ -406,23 +572,37 @@ class ESPNService:
 
     async def match_detail(self, event_id: str, league_slug: str) -> Dict[str, Any]:
         key = f"detail:{league_slug}:{event_id}"
-        cached = self.cache.get(key, 15)
-        if cached is not None:
-            return cached
-        payload = await self._fetch_json(self.SUMMARY_URL.format(slug=league_slug), {"event": event_id})
-        result = parse_match_detail(payload)
-        self.cache.set(key, result)
-        return result
+        async def load() -> Dict[str, Any]:
+            payload = await self._fetch_json(self.SUMMARY_URL.format(slug=league_slug), {"event": event_id})
+            return parse_match_detail(payload)
+        return await self._cached(key, 15, load)
 
     async def standings(self, league: Dict[str, str]) -> Dict[str, Any]:
         key = f"standings:{league['slug']}"
-        cached = self.cache.get(key, 300)
-        if cached is not None:
-            return cached
-        payload = await self._fetch_json(self.STANDINGS_URL.format(slug=league["slug"]))
-        result = parse_standings(payload)
-        self.cache.set(key, result)
-        return result
+        async def load() -> Dict[str, Any]:
+            payload = await self._fetch_json(self.STANDINGS_URL.format(slug=league["slug"]))
+            return parse_standings(payload)
+        return await self._cached(key, 300, load, stale_ttl=7200)
+
+    async def team_detail(self, team_id: str, league: Dict[str, str]) -> Dict[str, Any]:
+        key = f"team:{league['slug']}:{team_id}"
+
+        async def load() -> Dict[str, Any]:
+            today = datetime.now(ISTANBUL).date()
+            date_range = f"{(today - timedelta(days=90)):%Y%m%d}-{(today + timedelta(days=90)):%Y%m%d}"
+            team_result, roster_result, fixtures_result = await asyncio.gather(
+                self._fetch_json(self.TEAM_URL.format(slug=league["slug"], team_id=team_id)),
+                self._fetch_json(self.ROSTER_URL.format(slug=league["slug"], team_id=team_id)),
+                self._fetch_json(self.SCOREBOARD_URL.format(slug=league["slug"]), {"dates": date_range, "limit": "1000"}),
+                return_exceptions=True,
+            )
+            if isinstance(team_result, Exception):
+                raise team_result
+            roster_payload = roster_result if isinstance(roster_result, dict) else {}
+            fixtures_payload = fixtures_result if isinstance(fixtures_result, dict) else {}
+            return parse_team_detail(team_result, roster_payload, fixtures_payload, league)
+
+        return await self._cached(key, 300, load, stale_ttl=7200)
 
 
 espn_service = ESPNService()

@@ -3,7 +3,7 @@ import asyncio
 from fastapi.testclient import TestClient
 
 from app.main import app
-from app.services.espn import ESPNService, parse_fixtures, parse_match_detail, parse_standings
+from app.services.espn import ESPNService, ESPNServiceError, parse_fixtures, parse_match_detail, parse_standings, parse_team_detail
 
 
 LEAGUE = {"slug": "tur.1", "name": "Trendyol Süper Lig"}
@@ -33,6 +33,8 @@ def test_fixture_parser_includes_logos_and_date():
     assert match["startTime"] == "2026-09-01T17:00Z"
     assert match["matchDate"] == "2026-09-01"
     assert match["score"] == "vs"
+    assert match["homeScore"] == "0"
+    assert match["awayScore"] == "0"
 
 
 def test_fixture_parser_uses_local_logo_overrides_for_missing_espn_assets():
@@ -83,6 +85,18 @@ def test_all_fixtures_combines_leagues_and_prioritizes_live_matches():
 
     assert result["league"] == "Tüm Ligler"
     assert [match["id"] for match in result["matches"]] == ["eng.1", "tur.1"]
+
+
+def test_cached_response_falls_back_to_recent_stale_data():
+    service = ESPNService()
+    service.cache.set("sample", {"matches": ["cached"]})
+
+    async def failing_loader():
+        raise ESPNServiceError("upstream unavailable")
+
+    result = asyncio.run(service._cached("sample", -1, failing_loader, stale_ttl=60))
+
+    assert result == {"matches": ["cached"]}
 
 
 def test_own_goal_uses_espn_scoring_team_without_inversion():
@@ -170,6 +184,32 @@ def test_rosters_and_stats_are_matched_by_team_id_not_array_order():
     assert result["lineups"]["awayFormation"] == "4-4-2"
 
 
+def test_match_detail_includes_extended_team_statistics():
+    payload = {
+        "header": {"competitions": [{"competitors": [
+            {"id": "h", "homeAway": "home"},
+            {"id": "a", "homeAway": "away"},
+        ]}]},
+        "boxscore": {"teams": [
+            {"team": {"id": "h"}, "statistics": [
+                {"name": "totalPasses", "displayValue": "510"},
+                {"name": "passPct", "displayValue": "88%"},
+                {"name": "interceptions", "displayValue": "7"},
+            ]},
+            {"team": {"id": "a"}, "statistics": [
+                {"name": "totalPasses", "displayValue": "320"},
+                {"name": "passPct", "displayValue": "74%"},
+                {"name": "interceptions", "displayValue": "12"},
+            ]},
+        ]},
+    }
+
+    stats = parse_match_detail(payload)["stats"]
+
+    assert {item["title"] for item in stats} == {"Toplam Pas", "Pas İsabeti (%)", "Pas Arası"}
+    assert {item["title"]: item["home"] for item in stats}["Toplam Pas"] == "510"
+
+
 def test_visual_lineup_contains_pitch_data_bench_stats_and_event_badges():
     payload = {
         "header": {"competitions": [{"competitors": [
@@ -252,6 +292,51 @@ def test_standings_parser_returns_dashboard_columns():
     row = parse_standings(payload)["groups"][0]["rows"][0]
 
     assert row == {
-        "rank": "1", "team": "Galatasaray", "logo": "gal.png", "played": "3",
+        "rank": "1", "teamId": "432", "team": "Galatasaray", "logo": "gal.png", "played": "3",
         "wins": "3", "draws": "0", "losses": "0", "goalDifference": "+7", "points": "9",
     }
+
+
+def test_team_detail_parser_returns_record_form_schedule_and_squad():
+    team_payload = {"team": {
+        "id": "432", "displayName": "Galatasaray", "abbreviation": "GAL", "color": "aa0031",
+        "logos": [{"href": "gal.png"}],
+        "record": {"items": [{"stats": [
+            {"name": "rank", "value": 1}, {"name": "gamesPlayed", "value": 3},
+            {"name": "wins", "value": 2}, {"name": "ties", "value": 1},
+            {"name": "losses", "value": 0}, {"name": "pointsFor", "value": 9},
+            {"name": "pointsAgainst", "value": 4}, {"name": "pointDifferential", "value": 5},
+            {"name": "points", "value": 7},
+        ]}]},
+    }}
+    roster_payload = {"athletes": [{
+        "id": "1", "displayName": "Oyuncu A", "shortName": "O. A", "jersey": "10", "age": 24,
+        "citizenship": "Türkiye", "position": {"abbreviation": "AM", "displayName": "Midfielder"},
+    }]}
+    fixtures_payload = {"events": [
+        {
+            "id": "past", "date": "2026-08-29T18:30Z", "status": {"type": {"state": "post", "shortDetail": "FT"}},
+            "competitions": [{"competitors": [
+                {"id": "432", "homeAway": "home", "score": "3", "team": {"id": "432", "displayName": "Galatasaray"}},
+                {"id": "789", "homeAway": "away", "score": "2", "team": {"id": "789", "displayName": "Goztepe"}},
+            ]}],
+        },
+        {
+            "id": "next", "date": "2026-09-04T17:00Z", "status": {"type": {"state": "pre", "shortDetail": ""}},
+            "competitions": [{"competitors": [
+                {"id": "101", "homeAway": "home", "score": "0", "team": {"id": "101", "displayName": "Basaksehir"}},
+                {"id": "432", "homeAway": "away", "score": "0", "team": {"id": "432", "displayName": "Galatasaray"}},
+            ]}],
+        },
+    ]}
+
+    result = parse_team_detail(team_payload, roster_payload, fixtures_payload, LEAGUE)
+
+    assert result["record"] == {
+        "rank": 1, "played": 3, "wins": 2, "draws": 1, "losses": 0,
+        "goalsFor": 9, "goalsAgainst": 4, "goalDifference": 5, "points": 7,
+    }
+    assert result["recent"][0]["result"] == "G"
+    assert result["recent"][0]["opponent"] == "Göztepe"
+    assert result["upcoming"][0]["opponent"] == "Başakşehir"
+    assert result["squad"][0]["name"] == "Oyuncu A"

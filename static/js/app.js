@@ -1,14 +1,33 @@
 "use strict";
 
+const leagueSlugs = {
+  superlig: "tur.1", premier: "eng.1", laliga: "esp.1", seriea: "ita.1", bundesliga: "ger.1",
+  ligue1: "fra.1", eredivisie: "ned.1", ligaportugal: "por.1", saudi: "ksa.1",
+  ucl: "uefa.champions", uel: "uefa.europa", uecl: "uefa.europa.conf",
+};
+const preferenceKeys = {
+  teams: "canlispor.favoriteTeams",
+  leagues: "canlispor.favoriteLeagues",
+  notifications: "canlispor.notifications",
+};
+
 const state = {
   activeLeague: "all",
   selectedDate: toISODate(new Date()),
   matches: [],
   selectedMatchId: null,
+  selectedMatch: null,
+  detailMatchId: null,
   liveOnly: false,
+  favoritesOnly: false,
   activeView: "matches",
+  activeDetailTab: "overview",
+  favoriteTeams: new Set(),
+  favoriteLeagues: new Set(),
+  notificationsEnabled: false,
   fixtureRequest: 0,
   detailRequest: 0,
+  teamRequest: 0,
 };
 
 const elements = {};
@@ -29,6 +48,48 @@ function addDays(value, amount) {
   const date = fromISODate(value);
   date.setDate(date.getDate() + amount);
   return toISODate(date);
+}
+
+function parseURLState(search) {
+  const params = new URLSearchParams(search || "");
+  const league = params.get("league");
+  const selectedDate = params.get("date");
+  const match = params.get("match");
+  return {
+    league: league === "all" || leagueSlugs[league] ? league : "all",
+    date: /^\d{4}-\d{2}-\d{2}$/.test(selectedDate || "") ? selectedDate : "",
+    match: /^\d+$/.test(match || "") ? match : null,
+  };
+}
+
+function leagueKeyFromSlug(slug) {
+  return Object.keys(leagueSlugs).find(key => leagueSlugs[key] === slug) || "all";
+}
+
+function storedSet(storage, key) {
+  try {
+    const value = JSON.parse(storage.getItem(key) || "[]");
+    return new Set(Array.isArray(value) ? value.map(String) : []);
+  } catch (_) {
+    return new Set();
+  }
+}
+
+function savePreferences() {
+  try {
+    localStorage.setItem(preferenceKeys.teams, JSON.stringify([...state.favoriteTeams]));
+    localStorage.setItem(preferenceKeys.leagues, JSON.stringify([...state.favoriteLeagues]));
+    localStorage.setItem(preferenceKeys.notifications, String(state.notificationsEnabled));
+  } catch (_) { /* Preferences are optional when storage is unavailable. */ }
+}
+
+function syncURL(push = false) {
+  const params = new URLSearchParams();
+  params.set("date", state.selectedDate);
+  if (state.activeLeague !== "all") params.set("league", state.activeLeague);
+  if (state.selectedMatchId) params.set("match", state.selectedMatchId);
+  const url = `${window.location.pathname}?${params.toString()}`;
+  window.history[push ? "pushState" : "replaceState"]({}, "", url);
 }
 
 function node(tag, className, text) {
@@ -91,14 +152,19 @@ function updateDateControls() {
 function setDate(value) {
   state.selectedDate = value;
   state.selectedMatchId = null;
+  state.selectedMatch = null;
+  state.detailMatchId = null;
   updateDateControls();
+  syncURL();
   loadFixtures();
 }
 
 function setStageMatch(match) {
+  state.selectedMatch = match;
   elements.stagePlaceholder.hidden = true;
   elements.stageContent.hidden = false;
   elements.detailsGrid.hidden = false;
+  elements.matchDetailTabs.hidden = false;
   elements.stageMeta.textContent = match.round ? `${match.league} • ${match.round}` : match.league;
   elements.stageHome.textContent = match.homeTeam;
   elements.stageAway.textContent = match.awayTeam;
@@ -107,8 +173,14 @@ function setStageMatch(match) {
   setImage(elements.stageAwayLogo, match.awayLogo, `${match.awayTeam} logosu`);
   elements.lineupHomeName.textContent = match.homeTeam;
   elements.lineupAwayName.textContent = match.awayTeam;
+  elements.stageHomeButton.dataset.teamId = match.homeId;
+  elements.stageHomeButton.dataset.leagueSlug = match.leagueSlug;
+  elements.stageAwayButton.dataset.teamId = match.awayId;
+  elements.stageAwayButton.dataset.leagueSlug = match.leagueSlug;
+  updateTeamFavoriteButtons();
   elements.stageTag.className = `match-tag${match.status === "LIVE" ? " live" : ""}`;
   elements.stageTag.textContent = match.status === "LIVE" ? match.minute : (match.fullDate || match.time);
+  setDetailTab(state.activeDetailTab);
 }
 
 function setImage(img, src, alt) {
@@ -128,26 +200,133 @@ function resetDetails() {
   elements.refereeText.textContent = "Yükleniyor...";
 }
 
+function setDetailTab(tab) {
+  const selected = ["overview", "timeline", "lineups", "stats"].includes(tab) ? tab : "overview";
+  state.activeDetailTab = selected;
+  for (const button of elements.matchDetailTabs.querySelectorAll("[data-detail-tab]")) {
+    const active = button.dataset.detailTab === selected;
+    button.classList.toggle("active", active);
+    button.setAttribute("aria-selected", String(active));
+  }
+  for (const panel of elements.detailsGrid.querySelectorAll("[data-detail-panel]")) {
+    panel.hidden = panel.dataset.detailPanel !== selected;
+  }
+}
+
+function isFavoriteMatch(match, teams = state.favoriteTeams, leagues = state.favoriteLeagues) {
+  return teams.has(String(match.homeId)) || teams.has(String(match.awayId)) || leagues.has(String(match.leagueSlug));
+}
+
+function updateTeamFavoriteButtons() {
+  for (const [button, teamId, teamName] of [
+    [elements.stageHomeFavorite, state.selectedMatch?.homeId, state.selectedMatch?.homeTeam],
+    [elements.stageAwayFavorite, state.selectedMatch?.awayId, state.selectedMatch?.awayTeam],
+  ]) {
+    const active = Boolean(teamId && state.favoriteTeams.has(String(teamId)));
+    button.classList.toggle("active", active);
+    button.setAttribute("aria-pressed", String(active));
+    button.textContent = active ? "★" : "☆";
+    button.setAttribute("aria-label", `${teamName || "Takım"} ${active ? "favorilerden çıkar" : "favorilere ekle"}`);
+  }
+}
+
+function updateFavoriteControls() {
+  const slug = leagueSlugs[state.activeLeague];
+  const active = Boolean(slug && state.favoriteLeagues.has(slug));
+  elements.favoriteLeagueButton.disabled = !slug;
+  elements.favoriteLeagueButton.classList.toggle("active", active);
+  elements.favoriteLeagueButton.setAttribute("aria-pressed", String(active));
+  elements.favoriteLeagueButton.textContent = active ? "★" : "☆";
+  elements.favoriteLeagueButton.title = active ? "Seçili ligi favorilerden çıkar" : "Seçili ligi favorilere ekle";
+  elements.favoritesFilter.classList.toggle("active", state.favoritesOnly);
+  elements.favoritesFilter.setAttribute("aria-pressed", String(state.favoritesOnly));
+  updateTeamFavoriteButtons();
+}
+
+function toggleFavoriteTeam(teamId) {
+  const key = String(teamId || "");
+  if (!key) return;
+  if (state.favoriteTeams.has(key)) state.favoriteTeams.delete(key); else state.favoriteTeams.add(key);
+  savePreferences();
+  updateFavoriteControls();
+  renderMatches();
+  if (!state.selectedMatchId) renderDayOverview(visibleMatches());
+}
+
+function toggleFavoriteLeague() {
+  const slug = leagueSlugs[state.activeLeague];
+  if (!slug) return;
+  if (state.favoriteLeagues.has(slug)) state.favoriteLeagues.delete(slug); else state.favoriteLeagues.add(slug);
+  savePreferences();
+  updateFavoriteControls();
+  renderMatches();
+  if (!state.selectedMatchId) renderDayOverview(visibleMatches());
+}
+
+async function toggleNotifications() {
+  if (!("Notification" in window)) {
+    showToast("Bu tarayıcı bildirimleri desteklemiyor.");
+    return;
+  }
+  if (!state.notificationsEnabled) {
+    const permission = await Notification.requestPermission();
+    if (permission !== "granted") {
+      showToast("Bildirim izni verilmedi.");
+      return;
+    }
+    state.notificationsEnabled = true;
+    showToast("Canlı gol bildirimleri açıldı.");
+  } else {
+    state.notificationsEnabled = false;
+    showToast("Canlı gol bildirimleri kapatıldı.");
+  }
+  savePreferences();
+  updateNotificationButton();
+}
+
+function updateNotificationButton() {
+  const active = state.notificationsEnabled && "Notification" in window && Notification.permission === "granted";
+  state.notificationsEnabled = active;
+  elements.notificationButton.classList.toggle("active", active);
+  elements.notificationButton.setAttribute("aria-pressed", String(active));
+}
+
+function notifyScoreChanges(previousMatches, matches) {
+  if (!state.notificationsEnabled || !("Notification" in window) || Notification.permission !== "granted") return;
+  for (const match of matches) {
+    const previous = previousMatches.get(match.id);
+    if (!previous || previous.score === match.score || match.status !== "LIVE") continue;
+    new Notification(`Gol! ${match.homeTeam} ${match.score} ${match.awayTeam}`, {
+      body: `${match.league} • ${match.minute}`,
+      icon: match.homeLogo || match.awayLogo || "/images/app-icon.svg",
+      tag: `match-${match.id}`,
+    });
+  }
+}
+
 async function loadFixtures() {
   const requestId = ++state.fixtureRequest;
+  const previousMatches = new Map(state.matches.map(match => [match.id, match]));
   setLoading(elements.matchFeed);
   try {
     const params = new URLSearchParams({ league: state.activeLeague, date: state.selectedDate });
     const data = await requestJSON(`/api/fixtures?${params}`);
     if (requestId !== state.fixtureRequest) return;
     state.matches = data.matches || [];
+    notifyScoreChanges(previousMatches, state.matches);
     renderMatches();
     renderTicker();
     updateLiveCount();
 
     const selected = state.matches.find(match => match.id === state.selectedMatchId);
+    const availableMatches = visibleMatches();
     if (selected) {
       setStageMatch(selected);
-      if (selected.status === "LIVE") loadMatchDetail(selected);
-    } else if (state.matches.length && state.activeLeague !== "all") {
-      selectMatch(state.matches[0]);
+      if (selected.status === "LIVE" || state.detailMatchId !== selected.id) loadMatchDetail(selected);
+    } else if (availableMatches.length && state.activeLeague !== "all") {
+      selectMatch(availableMatches[0]);
     } else if (state.matches.length) {
-      renderDayOverview(visibleMatches());
+      renderDayOverview(availableMatches);
     } else {
       clearStage("Bu tarihte maç bulunamadı.");
     }
@@ -159,19 +338,23 @@ async function loadFixtures() {
 }
 
 function visibleMatches() {
-  return state.liveOnly ? state.matches.filter(match => match.status === "LIVE") : state.matches;
+  return state.matches.filter(match => {
+    if (state.liveOnly && match.status !== "LIVE") return false;
+    if (state.favoritesOnly && !isFavoriteMatch(match)) return false;
+    return true;
+  });
 }
 
 function renderMatches() {
   const matches = visibleMatches();
   if (!matches.length) {
-    const message = state.liveOnly ? "Şu anda canlı maç yok." : "Bu tarihte maç bulunamadı.";
+    const message = state.favoritesOnly ? "Bu tarihte favori takım veya lig maçı yok." : (state.liveOnly ? "Şu anda canlı maç yok." : "Bu tarihte maç bulunamadı.");
     elements.matchFeed.replaceChildren(emptyState(message));
     return;
   }
 
   const cards = matches.map(match => {
-    const card = node("button", `feed-card ${match.status}${match.id === state.selectedMatchId ? " active-selected" : ""}`);
+    const card = node("button", `feed-card ${match.status}${match.id === state.selectedMatchId ? " active-selected" : ""}${isFavoriteMatch(match) ? " favorite" : ""}`);
     card.type = "button";
     card.dataset.matchId = match.id;
     card.setAttribute("aria-label", `${match.homeTeam} - ${match.awayTeam} maçını aç`);
@@ -196,7 +379,7 @@ function renderMatches() {
 }
 
 function overviewMatchCard(match) {
-  const card = node("button", `overview-match ${match.status}`);
+  const card = node("button", `overview-match ${match.status}${isFavoriteMatch(match) ? " favorite" : ""}`);
   card.type = "button";
   card.setAttribute("aria-label", `${match.homeTeam} - ${match.awayTeam} maçını aç`);
 
@@ -217,8 +400,11 @@ function overviewMatchCard(match) {
 
 function renderDayOverview(matches) {
   state.selectedMatchId = null;
+  state.selectedMatch = null;
+  state.detailMatchId = null;
   elements.stageContent.hidden = true;
   elements.detailsGrid.hidden = true;
+  elements.matchDetailTabs.hidden = true;
   elements.stagePlaceholder.hidden = false;
 
   const dateText = new Intl.DateTimeFormat("tr-TR", {
@@ -246,21 +432,26 @@ function renderDayOverview(matches) {
     block.append(title, grid);
     overview.append(block);
   }
-  if (!matches.length) overview.append(emptyState(state.liveOnly ? "Şu anda canlı maç yok." : "Bu tarihte maç bulunamadı."));
+  if (!matches.length) overview.append(emptyState(state.favoritesOnly ? "Bu tarihte favori takım veya lig maçı yok." : (state.liveOnly ? "Şu anda canlı maç yok." : "Bu tarihte maç bulunamadı.")));
   elements.stagePlaceholder.replaceChildren(overview);
 }
 
 function clearStage(message) {
   state.selectedMatchId = null;
+  state.selectedMatch = null;
+  state.detailMatchId = null;
   elements.stagePlaceholder.textContent = message;
   elements.stagePlaceholder.hidden = false;
   elements.stageContent.hidden = true;
   elements.detailsGrid.hidden = true;
+  elements.matchDetailTabs.hidden = true;
 }
 
 async function selectMatch(match) {
   if (!match) return;
   state.selectedMatchId = match.id;
+  state.activeDetailTab = "overview";
+  syncURL(true);
   renderMatches();
   setStageMatch(match);
   resetDetails();
@@ -277,6 +468,7 @@ async function loadMatchDetail(match) {
     renderTimeline(detail.events || [], match);
     renderStats(detail.stats || []);
     renderLineups(detail.lineups || {});
+    state.detailMatchId = match.id;
     elements.venueText.textContent = detail.venue || "Belirtilmedi";
     elements.refereeText.textContent = detail.referee || "Belirtilmedi";
   } catch (error) {
@@ -375,6 +567,10 @@ const playerStatLabels = {
   foulsCommitted: "Yaptığı faul",
   foulsSuffered: "Maruz kaldığı faul",
   ownGoals: "Kendi kalesine gol",
+  offsides: "Ofsayt",
+  saves: "Kurtarış",
+  goalsConceded: "Yediği gol",
+  shotsFaced: "Karşılaştığı şut",
 };
 
 const playerPositionLabels = {
@@ -478,6 +674,124 @@ function showPlayerDialog(player) {
   }
   elements.playerDialogContent.replaceChildren(content);
   if (!elements.playerDialog.open) elements.playerDialog.showModal();
+}
+
+function teamRecordItem(value, label) {
+  const item = node("div", "team-record-item");
+  item.append(node("strong", "", value), node("span", "", label));
+  return item;
+}
+
+function openTeamMatch(match) {
+  elements.teamDialog.close();
+  state.activeLeague = leagueKeyFromSlug(match.leagueSlug);
+  state.selectedDate = match.matchDate || toISODate(new Date(match.startTime));
+  state.selectedMatchId = match.id;
+  state.detailMatchId = null;
+  state.activeView = "matches";
+  elements.leagueSelect.value = state.activeLeague;
+  updateDateControls();
+  updateFavoriteControls();
+  setView("matches");
+  syncURL(true);
+  loadFixtures();
+}
+
+function teamMatchRow(match) {
+  const button = node("button", "team-match-row");
+  button.type = "button";
+  const opponent = node("span", "team-match-opponent");
+  opponent.append(image(match.opponentLogo, "", ""), node("span", "", `${match.isHome ? "İç saha" : "Deplasman"} • ${match.opponent}`));
+  const score = node("strong", `team-match-score ${match.result || ""}`, match.status === "FT" ? match.score : match.time);
+  button.append(node("span", "team-match-date", match.fullDate || match.time), opponent, score);
+  button.addEventListener("click", () => openTeamMatch(match));
+  return button;
+}
+
+function renderTeamDialog(data) {
+  const team = data.team || {};
+  const record = data.record || {};
+  const body = node("div", "team-dialog-body");
+  const hero = node("div", "team-dialog-hero");
+  if (/^[0-9a-f]{6}$/i.test(team.color || "")) hero.style.setProperty("--team-color", `#${team.color}`);
+  const logo = image(team.logo, "team-dialog-logo", `${team.name} logosu`);
+  const title = node("div", "team-dialog-title");
+  const heading = node("h2", "", team.name || "Takım");
+  heading.id = "teamDialogTitle";
+  title.append(node("span", "", team.league || ""), heading);
+  const favorite = node("button", `team-favorite-button${state.favoriteTeams.has(String(team.id)) ? " active" : ""}`, state.favoriteTeams.has(String(team.id)) ? "★" : "☆");
+  favorite.type = "button";
+  favorite.setAttribute("aria-label", `${team.name} favorisini değiştir`);
+  favorite.addEventListener("click", () => {
+    toggleFavoriteTeam(team.id);
+    renderTeamDialog(data);
+  });
+  hero.append(logo, title, favorite);
+  body.append(hero);
+
+  const recordGrid = node("div", "team-record-grid");
+  recordGrid.append(
+    teamRecordItem(record.rank ? `${record.rank}.` : "-", "Lig sırası"),
+    teamRecordItem(record.points ?? "-", "Puan"),
+    teamRecordItem(record.played ?? "-", "Maç"),
+    teamRecordItem(`${record.wins ?? 0}-${record.draws ?? 0}-${record.losses ?? 0}`, "G-B-M"),
+    teamRecordItem(`${record.goalsFor ?? 0}:${record.goalsAgainst ?? 0}`, "Gol"),
+  );
+  body.append(recordGrid);
+
+  const recent = data.recent || [];
+  const recentSection = node("section", "team-section");
+  const recentHeading = node("div", "team-section-heading");
+  const form = node("span", "form-strip");
+  form.append(...recent.slice().reverse().map(match => node("span", `form-result ${match.result || ""}`, match.result || "-")));
+  recentHeading.append(node("strong", "", "Son maçlar"), form);
+  const recentList = node("div", "team-match-list");
+  recentList.append(...(recent.length ? recent.map(teamMatchRow) : [emptyState("Henüz tamamlanan maç yok.")]));
+  recentSection.append(recentHeading, recentList);
+  body.append(recentSection);
+
+  const upcoming = data.upcoming || [];
+  const upcomingSection = node("section", "team-section");
+  upcomingSection.append(node("div", "team-section-heading", "Yaklaşan maçlar"));
+  const upcomingList = node("div", "team-match-list");
+  upcomingList.append(...(upcoming.length ? upcoming.map(teamMatchRow) : [emptyState("Planlanmış maç bulunamadı.")]));
+  upcomingSection.append(upcomingList);
+  body.append(upcomingSection);
+
+  const squad = data.squad || [];
+  const squadSection = node("section", "team-section");
+  squadSection.append(node("div", "team-section-heading", `Takım kadrosu • ${squad.length}`));
+  const squadGrid = node("div", "squad-grid");
+  const positionOrder = { G: 0, GK: 0, D: 1, CD: 1, LB: 1, RB: 1, M: 2, DM: 2, CM: 2, AM: 2, F: 3, CF: 3 };
+  const sortedSquad = squad.slice().sort((a, b) => (positionOrder[a.position] ?? 9) - (positionOrder[b.position] ?? 9) || String(a.name).localeCompare(String(b.name), "tr"));
+  for (const player of sortedSquad) {
+    const card = node("div", "squad-player");
+    const avatar = player.headshot ? image(player.headshot, "squad-avatar", "") : node("span", "squad-avatar", player.jersey || player.name?.slice(0, 2));
+    const copy = node("span", "squad-player-copy");
+    copy.append(node("strong", "", `${player.jersey ? `${player.jersey} • ` : ""}${player.shortName || player.name}`), node("span", "", [player.positionName, player.age ? `${player.age} yaş` : ""].filter(Boolean).join(" • ")));
+    card.append(avatar, copy);
+    squadGrid.append(card);
+  }
+  if (!squad.length) squadGrid.append(emptyState("Kadro verisi bulunamadı."));
+  squadSection.append(squadGrid);
+  body.append(squadSection);
+  elements.teamDialogContent.replaceChildren(body);
+}
+
+async function openTeamDetail(teamId, leagueSlug) {
+  if (!teamId || !leagueSlug) return;
+  const requestId = ++state.teamRequest;
+  elements.teamDialogContent.replaceChildren(node("div", "skeleton"), node("div", "skeleton"), node("div", "skeleton"));
+  if (!elements.teamDialog.open) elements.teamDialog.showModal();
+  try {
+    const params = new URLSearchParams({ team_id: teamId, league_slug: leagueSlug });
+    const data = await requestJSON(`/api/team-detail?${params}`);
+    if (requestId !== state.teamRequest) return;
+    renderTeamDialog(data);
+  } catch (error) {
+    if (requestId !== state.teamRequest) return;
+    elements.teamDialogContent.replaceChildren(emptyState("Takım bilgisi yüklenemedi", error.message));
+  }
 }
 
 function pitchPlayer(player) {
@@ -617,8 +931,10 @@ function renderStandings(groups) {
       const row = node("tr");
       row.append(node("td", "", standing.rank));
       const teamCell = node("td");
-      const team = node("span", "table-team");
+      const team = node("button", "table-team");
+      team.type = "button";
       team.append(image(standing.logo, "team-logo table-logo", ""), node("span", "", standing.team));
+      team.addEventListener("click", () => openTeamDetail(standing.teamId, leagueSlugs[state.activeLeague]));
       teamCell.append(team);
       row.append(teamCell);
       for (const key of ["played", "wins", "draws", "losses", "goalDifference"]) row.append(node("td", "", standing[key]));
@@ -652,6 +968,8 @@ function bindElements() {
     "lineupAwayForm", "homeLineupList", "awayLineupList", "venueText", "refereeText", "leagueSelect", "matchesTab",
     "standingsTab", "liveFilter", "matchFeed", "standingsPanel", "tickerTrack", "toast", "lineupHomeTab",
     "lineupAwayTab", "lineupHomeCol", "lineupAwayCol", "playerDialog", "playerDialogClose", "playerDialogContent",
+    "matchDetailTabs", "stageHomeButton", "stageAwayButton", "stageHomeFavorite", "stageAwayFavorite", "copyLinkButton",
+    "favoriteLeagueButton", "favoritesFilter", "notificationButton", "teamDialog", "teamDialogClose", "teamDialogContent",
   ];
   for (const id of ids) elements[id] = document.getElementById(id);
 }
@@ -667,6 +985,10 @@ function bindEvents() {
   elements.leagueSelect.addEventListener("change", event => {
     state.activeLeague = event.target.value;
     state.selectedMatchId = null;
+    state.selectedMatch = null;
+    state.detailMatchId = null;
+    updateFavoriteControls();
+    syncURL();
     if (state.activeView === "matches") loadFixtures(); else loadStandings();
   });
   elements.liveFilter.addEventListener("click", () => {
@@ -676,24 +998,75 @@ function bindEvents() {
     renderMatches();
     if (!state.selectedMatchId) renderDayOverview(visibleMatches());
   });
+  elements.favoritesFilter.addEventListener("click", () => {
+    state.favoritesOnly = !state.favoritesOnly;
+    updateFavoriteControls();
+    renderMatches();
+    if (!state.selectedMatchId) renderDayOverview(visibleMatches());
+  });
+  elements.favoriteLeagueButton.addEventListener("click", toggleFavoriteLeague);
+  elements.notificationButton.addEventListener("click", toggleNotifications);
   elements.matchesTab.addEventListener("click", () => setView("matches"));
   elements.standingsTab.addEventListener("click", () => setView("standings"));
   elements.lineupHomeTab.addEventListener("click", () => setMobileLineup("home"));
   elements.lineupAwayTab.addEventListener("click", () => setMobileLineup("away"));
+  for (const button of elements.matchDetailTabs.querySelectorAll("[data-detail-tab]")) {
+    button.addEventListener("click", () => setDetailTab(button.dataset.detailTab));
+  }
+  elements.stageHomeButton.addEventListener("click", () => openTeamDetail(elements.stageHomeButton.dataset.teamId, elements.stageHomeButton.dataset.leagueSlug));
+  elements.stageAwayButton.addEventListener("click", () => openTeamDetail(elements.stageAwayButton.dataset.teamId, elements.stageAwayButton.dataset.leagueSlug));
+  elements.stageHomeFavorite.addEventListener("click", () => toggleFavoriteTeam(state.selectedMatch?.homeId));
+  elements.stageAwayFavorite.addEventListener("click", () => toggleFavoriteTeam(state.selectedMatch?.awayId));
+  elements.copyLinkButton.addEventListener("click", async () => {
+    try {
+      await navigator.clipboard.writeText(window.location.href);
+      showToast("Maç bağlantısı kopyalandı.");
+    } catch (_) {
+      showToast("Bağlantı kopyalanamadı; adres çubuğundaki URL'yi kullanabilirsin.");
+    }
+  });
   elements.playerDialogClose.addEventListener("click", () => elements.playerDialog.close());
   elements.playerDialog.addEventListener("click", event => {
     if (event.target === elements.playerDialog) elements.playerDialog.close();
+  });
+  elements.teamDialogClose.addEventListener("click", () => elements.teamDialog.close());
+  elements.teamDialog.addEventListener("click", event => {
+    if (event.target === elements.teamDialog) elements.teamDialog.close();
   });
 }
 
 function init() {
   bindElements();
   bindEvents();
+  state.favoriteTeams = storedSet(localStorage, preferenceKeys.teams);
+  state.favoriteLeagues = storedSet(localStorage, preferenceKeys.leagues);
+  try { state.notificationsEnabled = localStorage.getItem(preferenceKeys.notifications) === "true"; } catch (_) { state.notificationsEnabled = false; }
+  const urlState = parseURLState(window.location.search);
+  state.activeLeague = urlState.league;
+  if (urlState.date) state.selectedDate = urlState.date;
+  state.selectedMatchId = urlState.match;
+  elements.leagueSelect.value = state.activeLeague;
   updateDateControls();
+  updateFavoriteControls();
+  updateNotificationButton();
+  syncURL();
   loadFixtures();
   window.setInterval(() => {
     if (state.activeView === "matches" && !document.hidden) loadFixtures();
   }, 15000);
+  window.addEventListener("popstate", () => {
+    const next = parseURLState(window.location.search);
+    state.activeLeague = next.league;
+    state.selectedDate = next.date || toISODate(new Date());
+    state.selectedMatchId = next.match;
+    state.selectedMatch = null;
+    state.detailMatchId = null;
+    elements.leagueSelect.value = state.activeLeague;
+    updateDateControls();
+    updateFavoriteControls();
+    loadFixtures();
+  });
+  if ("serviceWorker" in navigator) navigator.serviceWorker.register("/sw.js").catch(() => {});
 }
 
 document.addEventListener("DOMContentLoaded", init);

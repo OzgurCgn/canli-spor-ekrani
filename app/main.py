@@ -1,3 +1,4 @@
+from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import FastAPI
@@ -7,15 +8,24 @@ from fastapi.staticfiles import StaticFiles
 from app.routes.fixtures import router as fixtures_router
 from app.routes.matches import router as matches_router
 from app.routes.standings import router as standings_router
+from app.routes.teams import router as teams_router
+from app.services.espn import espn_service
 
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 STATIC_DIR = BASE_DIR / "static"
 
+@asynccontextmanager
+async def lifespan(_: FastAPI):
+    yield
+    await espn_service.close()
+
+
 app = FastAPI(
     title="Canlı Spor Ekranı API",
-    version="2.0.0",
+    version="3.0.0",
     description="ESPN verilerini kullanan canlı futbol skoru ve puan durumu API'si.",
+    lifespan=lifespan,
 )
 app.add_middleware(
     CORSMiddleware,
@@ -27,11 +37,12 @@ app.add_middleware(
 app.include_router(fixtures_router)
 app.include_router(matches_router)
 app.include_router(standings_router)
+app.include_router(teams_router)
 
 
 @app.get("/api/health", tags=["health"])
 async def health_check():
-    return {"status": "ok", "version": "2.0.0"}
+    return {"status": "ok", "version": "3.0.0"}
 
 
 app.mount("/", StaticFiles(directory=str(STATIC_DIR), html=True), name="static")
