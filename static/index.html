@@ -115,22 +115,30 @@
       <div class="sidebar-controls">
         <label class="sr-only" for="leagueSelect">Lig seç</label>
         <div class="league-picker-row">
-        <select class="league-dropdown" id="leagueSelect">
-          <option value="all">🌍 Tüm Ligler</option>
-          <option value="superlig">🇹🇷 Trendyol Süper Lig</option>
-          <option value="premier">🇬🇧 Premier League</option>
-          <option value="laliga">🇪🇸 La Liga</option>
-          <option value="seriea">🇮🇹 Serie A</option>
-          <option value="bundesliga">🇩🇪 Bundesliga</option>
-          <option value="ligue1">🇫🇷 Ligue 1</option>
-          <option value="eredivisie">🇳🇱 Eredivisie</option>
-          <option value="ligaportugal">🇵🇹 Liga Portugal</option>
-          <option value="saudi">🇸🇦 Suudi Pro Ligi</option>
-          <option value="ucl">⭐ UEFA Şampiyonlar Ligi</option>
-          <option value="uel">🏆 UEFA Avrupa Ligi</option>
-          <option value="uecl">🟢 UEFA Konferans Ligi</option>
-        </select>
-        <button class="league-favorite-button" id="favoriteLeagueButton" type="button" aria-pressed="false" aria-label="Seçili ligi favorilere ekle" title="Seçili ligi favorilere ekle">☆</button>
+          <select class="sr-only" id="leagueSelect" tabindex="-1" aria-hidden="true">
+            <option value="all">Tüm Ligler</option>
+            <option value="superlig">Trendyol Süper Lig</option>
+            <option value="premier">Premier League</option>
+            <option value="laliga">La Liga</option>
+            <option value="seriea">Serie A</option>
+            <option value="bundesliga">Bundesliga</option>
+            <option value="ligue1">Ligue 1</option>
+            <option value="eredivisie">Eredivisie</option>
+            <option value="ligaportugal">Liga Portugal</option>
+            <option value="saudi">Suudi Pro Ligi</option>
+            <option value="ucl">UEFA Şampiyonlar Ligi</option>
+            <option value="uel">UEFA Avrupa Ligi</option>
+            <option value="uecl">UEFA Konferans Ligi</option>
+          </select>
+          <div class="league-picker" id="leaguePicker">
+            <button class="league-picker-button" id="leagueSelectButton" type="button" aria-haspopup="listbox" aria-expanded="false" aria-controls="leagueMenu">
+              <span class="league-choice-logo league-all-logo" id="leagueSelectedLogo" aria-hidden="true">🌍</span>
+              <span id="leagueSelectedName">Tüm Ligler</span>
+              <span class="league-picker-chevron" aria-hidden="true">⌄</span>
+            </button>
+            <div class="league-menu" id="leagueMenu" role="listbox" aria-label="Lig seç" hidden></div>
+          </div>
+          <button class="league-favorite-button" id="favoriteLeagueButton" type="button" aria-pressed="false" aria-label="Seçili ligi favorilere ekle" title="Seçili ligi favorilere ekle">☆</button>
         </div>
         <div class="view-tabs" role="tablist" aria-label="Görünüm">
           <button class="tab-button active" id="matchesTab" type="button" role="tab">Maçlar</button>

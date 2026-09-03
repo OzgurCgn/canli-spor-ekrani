@@ -9,7 +9,7 @@ client = TestClient(app)
 def test_health_endpoint():
     response = client.get("/api/health")
     assert response.status_code == 200
-    assert response.json() == {"status": "ok", "version": "3.0.0"}
+    assert response.json() == {"status": "ok", "version": "3.1.0"}
 
 
 def test_unknown_league_is_rejected_without_upstream_request():

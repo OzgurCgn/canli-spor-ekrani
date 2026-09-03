@@ -14,6 +14,7 @@ CanlıSpor; farklı liglerdeki fikstürleri, canlı skorları, maç olaylarını
 - Lig puan durumu
 - Sadece canlı maçları gösteren filtre
 - Takım ve lig favorileri; favorilere özel maç filtresi
+- Gerçek lig logolarıyla özel lig seçici
 - Takım profili, lig derecesi, form, yaklaşan maçlar ve sezon kadrosu
 - Sekmeli maç merkezi ve 15 gelişmiş takım istatistiği
 - Tarih, lig ve maçı koruyan paylaşılabilir bağlantılar

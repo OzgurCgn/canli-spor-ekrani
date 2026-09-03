@@ -8,7 +8,15 @@ const sandbox = {
   URLSearchParams,
   document: { addEventListener() {} },
 };
-vm.runInNewContext(`${source}\nObject.assign(globalThis, { parseURLState, horizontalRank, storedSet, isFavoriteMatch });`, sandbox);
+vm.runInNewContext(`${source}\nObject.assign(globalThis, { leagueChoices, parseURLState, horizontalRank, storedSet, isFavoriteMatch });`, sandbox);
+
+test("league picker has a logo for every supported competition", () => {
+  assert.equal(Object.keys(sandbox.leagueChoices).length, 13);
+  for (const key of Object.keys(sandbox.leagueChoices)) {
+    const choice = sandbox.leagueChoices[key];
+    assert.ok(choice.logo || choice.symbol, `${key} needs a visual`);
+  }
+});
 
 test("shareable URL state accepts supported values", () => {
   assert.deepEqual(

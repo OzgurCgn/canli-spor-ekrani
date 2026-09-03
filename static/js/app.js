@@ -5,6 +5,21 @@ const leagueSlugs = {
   ligue1: "fra.1", eredivisie: "ned.1", ligaportugal: "por.1", saudi: "ksa.1",
   ucl: "uefa.champions", uel: "uefa.europa", uecl: "uefa.europa.conf",
 };
+const leagueChoices = {
+  all: { name: "Tüm Ligler", symbol: "🌍" },
+  superlig: { name: "Trendyol Süper Lig", logo: "https://a.espncdn.com/i/leaguelogos/soccer/500/18.png" },
+  premier: { name: "Premier League", logo: "https://a.espncdn.com/i/leaguelogos/soccer/500/23.png" },
+  laliga: { name: "La Liga", logo: "https://a.espncdn.com/i/leaguelogos/soccer/500/15.png" },
+  seriea: { name: "Serie A", logo: "https://a.espncdn.com/i/leaguelogos/soccer/500/12.png" },
+  bundesliga: { name: "Bundesliga", logo: "https://a.espncdn.com/i/leaguelogos/soccer/500/10.png" },
+  ligue1: { name: "Ligue 1", logo: "https://a.espncdn.com/i/leaguelogos/soccer/500/9.png" },
+  eredivisie: { name: "Eredivisie", logo: "https://a.espncdn.com/i/leaguelogos/soccer/500/11.png" },
+  ligaportugal: { name: "Liga Portugal", logo: "https://a.espncdn.com/i/leaguelogos/soccer/500/14.png" },
+  saudi: { name: "Suudi Pro Ligi", logo: "https://a.espncdn.com/i/leaguelogos/soccer/500/2488.png" },
+  ucl: { name: "UEFA Şampiyonlar Ligi", logo: "https://a.espncdn.com/i/leaguelogos/soccer/500/2.png" },
+  uel: { name: "UEFA Avrupa Ligi", logo: "https://a.espncdn.com/i/leaguelogos/soccer/500/2310.png" },
+  uecl: { name: "UEFA Konferans Ligi", logo: "https://a.espncdn.com/i/leaguelogos/soccer/500/20296.png" },
+};
 const preferenceKeys = {
   teams: "canlispor.favoriteTeams",
   leagues: "canlispor.favoriteLeagues",
@@ -106,6 +121,57 @@ function image(src, className, alt) {
   if (src) img.src = src;
   img.addEventListener("error", () => { img.hidden = true; }, { once: true });
   return img;
+}
+
+function leagueLogo(key) {
+  const choice = leagueChoices[key] || leagueChoices.all;
+  const holder = node("span", `league-choice-logo${choice.logo ? "" : " league-all-logo"}`);
+  holder.setAttribute("aria-hidden", "true");
+  if (choice.logo) holder.append(image(choice.logo, "league-logo-image", ""));
+  else holder.textContent = choice.symbol;
+  return holder;
+}
+
+function setLeagueMenu(open) {
+  elements.leagueMenu.hidden = !open;
+  elements.leagueSelectButton.setAttribute("aria-expanded", String(open));
+  elements.leaguePicker.classList.toggle("open", open);
+  if (open) {
+    const selected = elements.leagueMenu.querySelector('[aria-selected="true"]');
+    selected?.focus();
+  }
+}
+
+function updateLeaguePicker() {
+  const choice = leagueChoices[state.activeLeague] || leagueChoices.all;
+  elements.leagueSelectedLogo.replaceWith(leagueLogo(state.activeLeague));
+  elements.leagueSelectedLogo = elements.leagueSelectButton.querySelector(".league-choice-logo");
+  elements.leagueSelectedLogo.id = "leagueSelectedLogo";
+  elements.leagueSelectedName.textContent = choice.name;
+  for (const option of elements.leagueMenu.querySelectorAll(".league-option")) {
+    const selected = option.dataset.league === state.activeLeague;
+    option.classList.toggle("selected", selected);
+    option.setAttribute("aria-selected", String(selected));
+  }
+}
+
+function renderLeagueMenu() {
+  const options = Object.entries(leagueChoices).map(([key, choice]) => {
+    const button = node("button", "league-option");
+    button.type = "button";
+    button.role = "option";
+    button.dataset.league = key;
+    button.append(leagueLogo(key), node("span", "league-option-name", choice.name), node("span", "league-option-check", "✓"));
+    button.addEventListener("click", () => {
+      elements.leagueSelect.value = key;
+      elements.leagueSelect.dispatchEvent(new Event("change", { bubbles: true }));
+      setLeagueMenu(false);
+      elements.leagueSelectButton.focus();
+    });
+    return button;
+  });
+  elements.leagueMenu.replaceChildren(...options);
+  updateLeaguePicker();
 }
 
 function emptyState(title, detail = "") {
@@ -690,6 +756,7 @@ function openTeamMatch(match) {
   state.detailMatchId = null;
   state.activeView = "matches";
   elements.leagueSelect.value = state.activeLeague;
+  updateLeaguePicker();
   updateDateControls();
   updateFavoriteControls();
   setView("matches");
@@ -970,6 +1037,7 @@ function bindElements() {
     "lineupAwayTab", "lineupHomeCol", "lineupAwayCol", "playerDialog", "playerDialogClose", "playerDialogContent",
     "matchDetailTabs", "stageHomeButton", "stageAwayButton", "stageHomeFavorite", "stageAwayFavorite", "copyLinkButton",
     "favoriteLeagueButton", "favoritesFilter", "notificationButton", "teamDialog", "teamDialogClose", "teamDialogContent",
+    "leaguePicker", "leagueSelectButton", "leagueSelectedLogo", "leagueSelectedName", "leagueMenu",
   ];
   for (const id of ids) elements[id] = document.getElementById(id);
 }
@@ -987,9 +1055,21 @@ function bindEvents() {
     state.selectedMatchId = null;
     state.selectedMatch = null;
     state.detailMatchId = null;
+    updateLeaguePicker();
     updateFavoriteControls();
     syncURL();
     if (state.activeView === "matches") loadFixtures(); else loadStandings();
+  });
+  elements.leagueSelectButton.addEventListener("click", event => {
+    event.stopPropagation();
+    setLeagueMenu(elements.leagueMenu.hidden);
+  });
+  elements.leaguePicker.addEventListener("click", event => event.stopPropagation());
+  document.addEventListener("click", () => setLeagueMenu(false));
+  document.addEventListener("keydown", event => {
+    if (event.key !== "Escape" || elements.leagueMenu.hidden) return;
+    setLeagueMenu(false);
+    elements.leagueSelectButton.focus();
   });
   elements.liveFilter.addEventListener("click", () => {
     state.liveOnly = !state.liveOnly;
@@ -1046,6 +1126,7 @@ function init() {
   if (urlState.date) state.selectedDate = urlState.date;
   state.selectedMatchId = urlState.match;
   elements.leagueSelect.value = state.activeLeague;
+  renderLeagueMenu();
   updateDateControls();
   updateFavoriteControls();
   updateNotificationButton();
@@ -1062,6 +1143,7 @@ function init() {
     state.selectedMatch = null;
     state.detailMatchId = null;
     elements.leagueSelect.value = state.activeLeague;
+    updateLeaguePicker();
     updateDateControls();
     updateFavoriteControls();
     loadFixtures();

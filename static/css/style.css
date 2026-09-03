@@ -446,8 +446,75 @@ button { color: inherit; }
 }
 .sidebar-controls { padding: 16px; display: grid; gap: 11px; border-bottom: 1px solid var(--line); position: sticky; top: 62px; z-index: 10; background: rgba(13, 18, 28, .97); }
 .league-picker-row { display: grid; grid-template-columns: minmax(0, 1fr) 42px; gap: 7px; }
-.league-dropdown { width: 100%; min-height: 42px; padding: 0 12px; border: 1px solid var(--line); border-radius: 9px; background: var(--surface-2); color: #fff; font-weight: 700; outline: none; }
-.league-dropdown:focus { border-color: var(--blue); }
+.league-picker { min-width: 0; position: relative; }
+.league-picker-button {
+  width: 100%;
+  min-height: 46px;
+  padding: 6px 11px;
+  display: grid;
+  grid-template-columns: 31px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 9px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface-2);
+  color: #fff;
+  text-align: left;
+  font-weight: 800;
+  cursor: pointer;
+  outline: none;
+}
+.league-picker-button:hover, .league-picker-button:focus-visible, .league-picker.open .league-picker-button { border-color: var(--blue); }
+.league-picker-chevron { color: var(--muted); font-size: 1.05rem; transition: transform .18s ease; }
+.league-picker.open .league-picker-chevron { transform: rotate(180deg); }
+.league-choice-logo {
+  width: 31px;
+  height: 31px;
+  padding: 3px;
+  display: inline-grid;
+  place-items: center;
+  flex: 0 0 auto;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, .16);
+  border-radius: 8px;
+  background: #f8fafc;
+}
+.league-all-logo { padding: 0; border-radius: 50%; background: rgba(56, 189, 248, .13); font-size: 1.1rem; }
+.league-logo-image { width: 100%; height: 100%; display: block; object-fit: contain; }
+.league-menu {
+  position: absolute;
+  top: calc(100% + 7px);
+  left: 0;
+  right: 0;
+  z-index: 40;
+  max-height: min(460px, calc(100vh - 150px));
+  padding: 6px;
+  overflow-y: auto;
+  border: 1px solid #33445f;
+  border-radius: 12px;
+  background: #111827;
+  box-shadow: 0 20px 45px rgba(0, 0, 0, .48);
+}
+.league-option {
+  width: 100%;
+  min-height: 45px;
+  padding: 6px 8px;
+  display: grid;
+  grid-template-columns: 31px minmax(0, 1fr) 18px;
+  align-items: center;
+  gap: 9px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: #e5edf8;
+  text-align: left;
+  cursor: pointer;
+}
+.league-option:hover, .league-option:focus-visible { background: var(--surface-3); outline: none; }
+.league-option.selected { background: rgba(56, 189, 248, .12); color: #fff; }
+.league-option-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: .82rem; font-weight: 750; }
+.league-option-check { visibility: hidden; color: var(--blue); font-weight: 900; }
+.league-option.selected .league-option-check { visibility: visible; }
 .league-favorite-button { border: 1px solid var(--line); border-radius: 9px; background: var(--surface-2); color: #75859b; cursor: pointer; font-size: 1.1rem; }
 .league-favorite-button.active { border-color: rgba(250, 204, 21, .5); color: #facc15; }
 .league-favorite-button:disabled { opacity: .42; cursor: not-allowed; }
