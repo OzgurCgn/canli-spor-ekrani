@@ -1,12 +1,21 @@
 import asyncio
+from datetime import date
 
 from fastapi.testclient import TestClient
 
 from app.main import app
-from app.services.espn import ESPNService, ESPNServiceError, parse_fixtures, parse_match_detail, parse_standings, parse_team_detail
+from app.services.espn import ESPNService, ESPNServiceError, fixture_cache_policy, parse_fixtures, parse_match_detail, parse_standings, parse_team_detail
 
 
 LEAGUE = {"slug": "tur.1", "name": "Trendyol Süper Lig"}
+
+
+def test_fixture_cache_policy_varies_for_past_today_and_future():
+    current = date(2026, 9, 3)
+
+    assert fixture_cache_policy("2026-09-02", current) == (21600, 604800)
+    assert fixture_cache_policy("2026-09-03", current) == (15, 1800)
+    assert fixture_cache_policy("2026-09-04", current) == (900, 21600)
 
 
 def test_fixture_parser_includes_logos_and_date():

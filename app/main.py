@@ -23,7 +23,7 @@ async def lifespan(_: FastAPI):
 
 app = FastAPI(
     title="Canlı Spor Ekranı API",
-    version="3.1.0",
+    version="3.2.0",
     description="ESPN verilerini kullanan canlı futbol skoru ve puan durumu API'si.",
     lifespan=lifespan,
 )
@@ -40,9 +40,10 @@ app.include_router(standings_router)
 app.include_router(teams_router)
 
 
+@app.get("/health", include_in_schema=False)
 @app.get("/api/health", tags=["health"])
 async def health_check():
-    return {"status": "ok", "version": "3.1.0"}
+    return {"status": "ok", "version": "3.2.0"}
 
 
 app.mount("/", StaticFiles(directory=str(STATIC_DIR), html=True), name="static")

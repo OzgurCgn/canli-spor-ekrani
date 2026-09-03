@@ -1,6 +1,6 @@
 import asyncio
 import time
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 from typing import Any, Awaitable, Callable, Dict, List, Optional
 
 import httpx
@@ -32,6 +32,17 @@ class TTLCache:
 
     def set(self, key: str, value: Any) -> None:
         self._items[key] = {"created_at": time.monotonic(), "value": value}
+
+
+def fixture_cache_policy(selected_date: str, today: Optional[date] = None) -> tuple[int, int]:
+    """Return fresh/stale TTLs without making old schedules hit ESPN every 15 seconds."""
+    selected = date.fromisoformat(selected_date)
+    current = today or datetime.now(ISTANBUL).date()
+    if selected < current:
+        return 21600, 604800
+    if selected > current:
+        return 900, 21600
+    return 15, 1800
 
 
 def _logo_url(team: Dict[str, Any]) -> str:
@@ -535,13 +546,14 @@ class ESPNService:
 
     async def fixtures(self, league: Dict[str, str], selected_date: str) -> Dict[str, Any]:
         key = f"fixtures:{league['slug']}:{selected_date}"
+        ttl, stale_ttl = fixture_cache_policy(selected_date)
         async def load() -> Dict[str, Any]:
             payload = await self._fetch_json(
                 self.SCOREBOARD_URL.format(slug=league["slug"]),
                 {"dates": selected_date.replace("-", "")},
             )
             return {"league": league["name"], "date": selected_date, "matches": parse_fixtures(payload, league)}
-        return await self._cached(key, 15, load)
+        return await self._cached(key, ttl, load, stale_ttl=stale_ttl)
 
     async def all_fixtures(self, leagues: List[Dict[str, str]], selected_date: str) -> Dict[str, Any]:
         results = await asyncio.gather(

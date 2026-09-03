@@ -8,7 +8,7 @@ CanlıSpor; farklı liglerdeki fikstürleri, canlı skorları, maç olaylarını
 
 - 12 lig için canlı skor ve günlük fikstür
 - Dün / bugün / yarın kısayolları ve takvimden tarih seçimi
-- Takım logoları ve 15 saniyede bir otomatik yenileme
+- Takım logoları; canlı maçlarda 15 saniyelik, günün diğer maçlarında daha seyrek akıllı yenileme
 - Gol, penaltı, kendi kalesine gol, sarı/kırmızı kart ve oyuncu değişikliği timeline'ı
 - Maç istatistikleri, resmi ilk 11'ler, diziliş, stadyum ve hakem bilgisi
 - Lig puan durumu
@@ -22,7 +22,8 @@ CanlıSpor; farklı liglerdeki fikstürleri, canlı skorları, maç olaylarını
 - Telefona ve masaüstüne kurulabilen PWA desteği
 - Masaüstü, tablet ve mobil ekranlara uyumlu tasarım
 - Bağlantı yeniden kullanımı, otomatik tekrar deneme ve stale-cache geri dönüşü
-- 15 saniyelik maç verisi ve 5 dakikalık puan durumu/takım cache'i
+- Tarihe duyarlı maç cache'i, tarayıcı oturum cache'i ve 5 dakikalık puan durumu/takım cache'i
+- Komşu tarihleri arka planda hazırlayan hızlı gün geçişleri ve eski istek iptali
 - API hata durumları, loading ekranları ve otomatik parser testleri
 - GitHub Actions üzerinde Python ve JavaScript testleri
 
@@ -112,6 +113,7 @@ docker run --rm -p 8000:8000 canlispor
 | `GET` | `/api/standings?league=superlig` | Lig puan durumu |
 | `GET` | `/api/team-detail?team_id=432&league_slug=tur.1` | Takım profili, form, fikstür ve kadro |
 | `GET` | `/api/health` | Sağlık kontrolü |
+| `GET` | `/health` | Harici uptime monitörü için hafif sağlık kontrolü |
 
 ## Testler
 

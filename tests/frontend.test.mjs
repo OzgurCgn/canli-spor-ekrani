@@ -8,7 +8,7 @@ const sandbox = {
   URLSearchParams,
   document: { addEventListener() {} },
 };
-vm.runInNewContext(`${source}\nObject.assign(globalThis, { leagueChoices, parseURLState, horizontalRank, storedSet, isFavoriteMatch });`, sandbox);
+vm.runInNewContext(`${source}\nObject.assign(globalThis, { leagueChoices, parseURLState, horizontalRank, storedSet, isFavoriteMatch, fixtureCacheTTL, addDays, toISODate });`, sandbox);
 
 test("league picker has a logo for every supported competition", () => {
   assert.equal(Object.keys(sandbox.leagueChoices).length, 13);
@@ -47,4 +47,18 @@ test("stored preferences recover safely from invalid JSON", () => {
   const badStorage = { getItem: () => "not-json" };
   assert.deepEqual([...sandbox.storedSet(goodStorage, "key")], ["432", "364"]);
   assert.deepEqual([...sandbox.storedSet(badStorage, "key")], []);
+});
+
+test("fixture cache keeps historical dates longer than live scores", () => {
+  const today = sandbox.toISODate(new Date());
+  assert.equal(sandbox.fixtureCacheTTL(today, { matches: [{ status: "LIVE" }] }), 15000);
+  assert.equal(sandbox.fixtureCacheTTL(today, { matches: [] }), 60000);
+  assert.equal(sandbox.fixtureCacheTTL(sandbox.addDays(today, -1), { matches: [] }), 21600000);
+  assert.equal(sandbox.fixtureCacheTTL(sandbox.addDays(today, 1), { matches: [] }), 900000);
+});
+
+test("polling is scheduled dynamically instead of running on every historical view", () => {
+  assert.doesNotMatch(source, /setInterval\s*\(/);
+  assert.match(source, /state\.selectedDate !== toISODate\(new Date\(\)\)/);
+  assert.match(source, /fixtureController\?\.abort\(\)/);
 });

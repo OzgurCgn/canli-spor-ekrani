@@ -25,6 +25,10 @@ const preferenceKeys = {
   leagues: "canlispor.favoriteLeagues",
   notifications: "canlispor.notifications",
 };
+const fixtureCacheStorageKey = "canlispor.fixtureCache.v1";
+const fixtureMemoryCache = new Map();
+const fixturePrefetches = new Set();
+const fixtureCacheLimit = 18;
 
 const state = {
   activeLeague: "all",
@@ -41,6 +45,9 @@ const state = {
   favoriteLeagues: new Set(),
   notificationsEnabled: false,
   fixtureRequest: 0,
+  fixtureController: null,
+  fixtureRefreshTimer: null,
+  fixturePrefetchTimer: null,
   detailRequest: 0,
   teamRequest: 0,
 };
@@ -181,14 +188,60 @@ function emptyState(title, detail = "") {
   return box;
 }
 
-async function requestJSON(url) {
-  const response = await fetch(url, { headers: { Accept: "application/json" } });
+async function requestJSON(url, options = {}) {
+  const response = await fetch(url, { headers: { Accept: "application/json" }, signal: options.signal });
   let payload = null;
   try { payload = await response.json(); } catch (_) { payload = null; }
   if (!response.ok) {
     throw new Error(payload?.detail || "Veri alınırken bir sorun oluştu.");
   }
   return payload;
+}
+
+function fixtureCacheKey(league, selectedDate) {
+  return `${league}:${selectedDate}`;
+}
+
+function fixtureCacheTTL(selectedDate, data) {
+  if ((data?.matches || []).some(match => match.status === "LIVE")) return 15000;
+  const current = toISODate(new Date());
+  if (selectedDate < current) return 21600000;
+  if (selectedDate > current) return 900000;
+  return 60000;
+}
+
+function restoreFixtureCache() {
+  try {
+    const stored = JSON.parse(sessionStorage.getItem(fixtureCacheStorageKey) || "{}");
+    for (const [key, entry] of Object.entries(stored)) {
+      if (entry && Number.isFinite(entry.savedAt) && entry.data) fixtureMemoryCache.set(key, entry);
+    }
+  } catch (_) { /* Session caching is an optional performance enhancement. */ }
+}
+
+function persistFixtureCache() {
+  try {
+    const entries = [...fixtureMemoryCache.entries()]
+      .sort((left, right) => right[1].savedAt - left[1].savedAt)
+      .slice(0, fixtureCacheLimit);
+    fixtureMemoryCache.clear();
+    for (const [key, entry] of entries) fixtureMemoryCache.set(key, entry);
+    sessionStorage.setItem(fixtureCacheStorageKey, JSON.stringify(Object.fromEntries(entries)));
+  } catch (_) { /* Ignore unavailable or full session storage. */ }
+}
+
+function cachedFixtures(league, selectedDate) {
+  const entry = fixtureMemoryCache.get(fixtureCacheKey(league, selectedDate));
+  if (!entry) return null;
+  return {
+    data: entry.data,
+    fresh: Date.now() - entry.savedAt < fixtureCacheTTL(selectedDate, entry.data),
+  };
+}
+
+function cacheFixtures(league, selectedDate, data) {
+  fixtureMemoryCache.set(fixtureCacheKey(league, selectedDate), { savedAt: Date.now(), data });
+  persistFixtureCache();
 }
 
 function showToast(message) {
@@ -216,6 +269,7 @@ function updateDateControls() {
 }
 
 function setDate(value) {
+  if (value === state.selectedDate) return;
   state.selectedDate = value;
   state.selectedMatchId = null;
   state.selectedMatch = null;
@@ -370,36 +424,109 @@ function notifyScoreChanges(previousMatches, matches) {
   }
 }
 
-async function loadFixtures() {
-  const requestId = ++state.fixtureRequest;
-  const previousMatches = new Map(state.matches.map(match => [match.id, match]));
-  setLoading(elements.matchFeed);
-  try {
-    const params = new URLSearchParams({ league: state.activeLeague, date: state.selectedDate });
-    const data = await requestJSON(`/api/fixtures?${params}`);
-    if (requestId !== state.fixtureRequest) return;
-    state.matches = data.matches || [];
-    notifyScoreChanges(previousMatches, state.matches);
-    renderMatches();
-    renderTicker();
-    updateLiveCount();
+function setFixturesUpdating(active) {
+  elements.matchFeed.classList.toggle("is-refreshing", active);
+  elements.mainStage.classList.toggle("is-refreshing", active);
+  elements.matchFeed.setAttribute("aria-busy", String(active));
+}
 
-    const selected = state.matches.find(match => match.id === state.selectedMatchId);
-    const availableMatches = visibleMatches();
-    if (selected) {
-      setStageMatch(selected);
-      if (selected.status === "LIVE" || state.detailMatchId !== selected.id) loadMatchDetail(selected);
-    } else if (availableMatches.length && state.activeLeague !== "all") {
-      selectMatch(availableMatches[0]);
-    } else if (state.matches.length) {
-      renderDayOverview(availableMatches);
+function applyFixtureData(data, previousMatches = new Map(), announceChanges = false) {
+  state.matches = data.matches || [];
+  if (announceChanges) notifyScoreChanges(previousMatches, state.matches);
+  renderMatches();
+  renderTicker();
+  updateLiveCount();
+
+  const selected = state.matches.find(match => match.id === state.selectedMatchId);
+  const availableMatches = visibleMatches();
+  if (selected) {
+    setStageMatch(selected);
+    if (selected.status === "LIVE" || state.detailMatchId !== selected.id) loadMatchDetail(selected);
+  } else if (availableMatches.length && state.activeLeague !== "all") {
+    selectMatch(availableMatches[0]);
+  } else if (state.matches.length) {
+    renderDayOverview(availableMatches);
+  } else {
+    clearStage("Bu tarihte maç bulunamadı.");
+  }
+}
+
+function scheduleFixtureRefresh() {
+  window.clearTimeout(state.fixtureRefreshTimer);
+  state.fixtureRefreshTimer = null;
+  if (state.selectedDate !== toISODate(new Date())) return;
+  const delay = state.matches.some(match => match.status === "LIVE") ? 15000 : 60000;
+  state.fixtureRefreshTimer = window.setTimeout(() => {
+    if (state.activeView === "matches" && !document.hidden) {
+      loadFixtures({ background: true, force: true, prefetch: false });
     } else {
-      clearStage("Bu tarihte maç bulunamadı.");
+      scheduleFixtureRefresh();
     }
+  }, delay);
+}
+
+function prefetchAdjacentFixtures(league, selectedDate) {
+  window.clearTimeout(state.fixturePrefetchTimer);
+  if (navigator.connection?.saveData || document.hidden) return;
+  state.fixturePrefetchTimer = window.setTimeout(async () => {
+    if (league !== state.activeLeague || selectedDate !== state.selectedDate) return;
+    for (const date of [addDays(selectedDate, -1), addDays(selectedDate, 1)]) {
+      const key = fixtureCacheKey(league, date);
+      if (cachedFixtures(league, date)?.fresh || fixturePrefetches.has(key)) continue;
+      fixturePrefetches.add(key);
+      try {
+        const params = new URLSearchParams({ league, date });
+        const data = await requestJSON(`/api/fixtures?${params}`);
+        cacheFixtures(league, date, data);
+      } catch (_) {
+        // Prefetch failure is silent; the normal navigation request can retry later.
+      } finally {
+        fixturePrefetches.delete(key);
+      }
+    }
+  }, 1200);
+}
+
+async function loadFixtures(options = {}) {
+  const { background = false, force = false, prefetch = true } = options;
+  const requestId = ++state.fixtureRequest;
+  const league = state.activeLeague;
+  const selectedDate = state.selectedDate;
+  const cached = cachedFixtures(league, selectedDate);
+  state.fixtureController?.abort();
+  state.fixtureController = null;
+
+  if (cached && !background) applyFixtureData(cached.data);
+  if (cached?.fresh && !force) {
+    setFixturesUpdating(false);
+    scheduleFixtureRefresh();
+    if (prefetch) prefetchAdjacentFixtures(league, selectedDate);
+    return;
+  }
+  if (!cached && !background && !state.matches.length) setLoading(elements.matchFeed);
+
+  const controller = new AbortController();
+  state.fixtureController = controller;
+  setFixturesUpdating(true);
+  try {
+    const params = new URLSearchParams({ league, date: selectedDate });
+    const data = await requestJSON(`/api/fixtures?${params}`, { signal: controller.signal });
+    if (requestId !== state.fixtureRequest || league !== state.activeLeague || selectedDate !== state.selectedDate) return;
+    const previousMatches = new Map(state.matches.map(match => [match.id, match]));
+    cacheFixtures(league, selectedDate, data);
+    applyFixtureData(data, previousMatches, true);
+    scheduleFixtureRefresh();
+    if (prefetch) prefetchAdjacentFixtures(league, selectedDate);
   } catch (error) {
-    if (requestId !== state.fixtureRequest) return;
-    elements.matchFeed.replaceChildren(emptyState("Maçlar yüklenemedi", error.message));
-    showToast(error.message);
+    if (error.name === "AbortError" || requestId !== state.fixtureRequest) return;
+    if (!cached && !state.matches.length) elements.matchFeed.replaceChildren(emptyState("Maçlar yüklenemedi", error.message));
+    showToast(cached ? "Güncel veri alınamadı; son kayıt gösteriliyor." : error.message);
+    scheduleFixtureRefresh();
+  } finally {
+    if (requestId === state.fixtureRequest) {
+      setFixturesUpdating(false);
+      if (state.fixtureController === controller) state.fixtureController = null;
+    }
   }
 }
 
@@ -1028,7 +1155,7 @@ function setView(view) {
 
 function bindElements() {
   const ids = [
-    "liveCount", "previousDay", "yesterdayButton", "todayButton", "tomorrowButton", "datePicker", "nextDay",
+    "liveCount", "mainStage", "previousDay", "yesterdayButton", "todayButton", "tomorrowButton", "datePicker", "nextDay",
     "selectedDateLabel", "stagePlaceholder", "stageContent", "detailsGrid", "stageMeta", "stageHomeLogo",
     "stageAwayLogo", "stageHome", "stageAway", "stageScore", "homeEventsList", "awayEventsList", "stageTag",
     "timeline", "eventCount", "statsContainer", "lineupBadge", "lineupHomeName", "lineupAwayName", "lineupHomeForm",
@@ -1118,6 +1245,7 @@ function bindEvents() {
 function init() {
   bindElements();
   bindEvents();
+  restoreFixtureCache();
   state.favoriteTeams = storedSet(localStorage, preferenceKeys.teams);
   state.favoriteLeagues = storedSet(localStorage, preferenceKeys.leagues);
   try { state.notificationsEnabled = localStorage.getItem(preferenceKeys.notifications) === "true"; } catch (_) { state.notificationsEnabled = false; }
@@ -1132,9 +1260,9 @@ function init() {
   updateNotificationButton();
   syncURL();
   loadFixtures();
-  window.setInterval(() => {
-    if (state.activeView === "matches" && !document.hidden) loadFixtures();
-  }, 15000);
+  document.addEventListener("visibilitychange", () => {
+    if (!document.hidden && state.activeView === "matches") loadFixtures({ background: true, force: true });
+  });
   window.addEventListener("popstate", () => {
     const next = parseURLState(window.location.search);
     state.activeLeague = next.league;
