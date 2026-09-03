@@ -402,9 +402,11 @@ function playerBand(player) {
 
 function horizontalRank(player) {
   const pos = String(player.pos || "").toUpperCase();
-  if (pos.endsWith("-L") || pos === "LB" || pos === "LM" || pos === "LW") return 0;
-  if (pos.endsWith("-R") || pos === "RB" || pos === "RM" || pos === "RW") return 2;
-  return 1;
+  if (["LB", "LWB", "LM", "LW"].includes(pos)) return 0;
+  if (pos.endsWith("-L")) return 1;
+  if (pos.endsWith("-R")) return 3;
+  if (["RB", "RWB", "RM", "RW"].includes(pos)) return 4;
+  return 2;
 }
 
 function eventBadge(badge, compact = false) {
