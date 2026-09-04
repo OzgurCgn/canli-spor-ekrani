@@ -640,6 +640,17 @@ function clearStage(message) {
   elements.matchDetailTabs.hidden = true;
 }
 
+function returnToDayOverview() {
+  state.detailRequest += 1;
+  state.selectedMatchId = null;
+  state.selectedMatch = null;
+  state.detailMatchId = null;
+  state.activeDetailTab = "overview";
+  syncURL();
+  renderMatches();
+  renderDayOverview(visibleMatches());
+}
+
 async function selectMatch(match) {
   if (!match) return;
   state.selectedMatchId = match.id;
@@ -1156,7 +1167,7 @@ function setView(view) {
 function bindElements() {
   const ids = [
     "liveCount", "mainStage", "previousDay", "yesterdayButton", "todayButton", "tomorrowButton", "datePicker", "nextDay",
-    "selectedDateLabel", "stagePlaceholder", "stageContent", "detailsGrid", "stageMeta", "stageHomeLogo",
+    "selectedDateLabel", "stagePlaceholder", "stageContent", "backToOverview", "detailsGrid", "stageMeta", "stageHomeLogo",
     "stageAwayLogo", "stageHome", "stageAway", "stageScore", "homeEventsList", "awayEventsList", "stageTag",
     "timeline", "eventCount", "statsContainer", "lineupBadge", "lineupHomeName", "lineupAwayName", "lineupHomeForm",
     "lineupAwayForm", "homeLineupList", "awayLineupList", "venueText", "refereeText", "leagueSelect", "matchesTab",
@@ -1213,6 +1224,7 @@ function bindEvents() {
   });
   elements.favoriteLeagueButton.addEventListener("click", toggleFavoriteLeague);
   elements.notificationButton.addEventListener("click", toggleNotifications);
+  elements.backToOverview.addEventListener("click", returnToDayOverview);
   elements.matchesTab.addEventListener("click", () => setView("matches"));
   elements.standingsTab.addEventListener("click", () => setView("standings"));
   elements.lineupHomeTab.addEventListener("click", () => setMobileLineup("home"));

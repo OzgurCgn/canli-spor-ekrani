@@ -191,7 +191,28 @@ button { color: inherit; }
   pointer-events: none;
 }
 
-#stageContent { width: 100%; position: relative; }
+#stageContent { width: 100%; position: relative; padding-top: 34px; }
+.back-to-overview {
+  position: absolute;
+  top: -4px;
+  left: 0;
+  z-index: 2;
+  padding: 7px 11px;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  border: 1px solid rgba(56, 189, 248, .28);
+  border-radius: 9px;
+  background: rgba(8, 15, 27, .72);
+  color: #cfeeff;
+  font: inherit;
+  font-size: .69rem;
+  font-weight: 800;
+  cursor: pointer;
+  transition: border-color .16s, background .16s, transform .16s;
+}
+.back-to-overview:hover { border-color: var(--blue); background: rgba(20, 47, 68, .9); transform: translateX(-2px); }
+.back-to-overview:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
 .stage-placeholder, .empty-state { color: var(--muted); text-align: center; }
 .stage-placeholder { width: 100%; }
 .empty-state { padding: 42px 18px; }
@@ -627,6 +648,8 @@ button { color: inherit; }
   .sidebar-controls { top: 56px; }
   .main-stage { padding: 12px; }
   .stage-card { min-height: 275px; padding: 22px 12px; }
+  #stageContent { padding-top: 38px; }
+  .back-to-overview { top: 0; font-size: .66rem; }
   .scoreboard { grid-template-columns: minmax(80px, 1fr) auto minmax(80px, 1fr); gap: 10px; }
   .stage-logo { width: 52px; height: 52px; }
   .team-name { font-size: .92rem; }

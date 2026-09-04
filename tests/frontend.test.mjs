@@ -62,3 +62,12 @@ test("polling is scheduled dynamically instead of running on every historical vi
   assert.match(source, /state\.selectedDate !== toISODate\(new Date\(\)\)/);
   assert.match(source, /fixtureController\?\.abort\(\)/);
 });
+
+test("match detail has a safe return path to the day overview", () => {
+  const html = fs.readFileSync(new URL("../static/index.html", import.meta.url), "utf8");
+  assert.match(html, /id="backToOverview"/);
+  assert.match(source, /function returnToDayOverview\(\)/);
+  assert.match(source, /state\.detailRequest \+= 1/);
+  assert.match(source, /elements\.backToOverview\.addEventListener\("click", returnToDayOverview\)/);
+  assert.match(source, /renderDayOverview\(visibleMatches\(\)\)/);
+});
