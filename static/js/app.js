@@ -1452,17 +1452,24 @@ function bindEvents() {
   elements.yesterdayButton.addEventListener("click", () => setDate(addDays(today(), -1)));
   elements.todayButton.addEventListener("click", () => setDate(today()));
   elements.tomorrowButton.addEventListener("click", () => setDate(addDays(today(), 1)));
-  elements.datePicker.addEventListener("change", event => { if (event.target.value) setDate(event.target.value); });
-  elements.datePickerLabel.addEventListener("click", () => {
+  elements.datePicker.addEventListener("change", event => {
+    elements.datePicker.classList.remove("open");
+    if (event.target.value) setDate(event.target.value);
+  });
+  elements.datePicker.addEventListener("click", event => event.stopPropagation());
+  elements.datePickerLabel.addEventListener("click", event => {
+    event.stopPropagation();
     elements.datePicker.value = state.selectedDate;
-    try { elements.datePicker.showPicker(); }
-    catch (_) {
-      elements.datePicker.style.left = `${elements.datePickerLabel.getBoundingClientRect().left}px`;
+    if (typeof elements.datePicker.showPicker === "function") {
+      try { elements.datePicker.showPicker(); return; }
+      catch (_) { /* Fall through to the visible desktop control. */ }
+    }
+    elements.datePicker.classList.toggle("open");
+    if (elements.datePicker.classList.contains("open")) {
       elements.datePicker.focus();
-      elements.datePicker.click();
-      elements.datePicker.style.left = "-9999px";
     }
   });
+  document.addEventListener("click", () => elements.datePicker.classList.remove("open"));
   elements.leagueSelect.addEventListener("change", event => {
     state.activeLeague = event.target.value;
     state.selectedMatchId = null;
