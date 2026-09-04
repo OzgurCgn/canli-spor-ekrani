@@ -40,6 +40,7 @@ app.include_router(standings_router)
 app.include_router(teams_router)
 
 
+@app.head("/health", include_in_schema=False)
 @app.get("/health", include_in_schema=False)
 @app.get("/api/health", tags=["health"])
 async def health_check():

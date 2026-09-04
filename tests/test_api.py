@@ -15,6 +15,10 @@ def test_health_endpoint():
     assert monitor_response.status_code == 200
     assert monitor_response.json() == response.json()
 
+    monitor_head_response = client.head("/health")
+    assert monitor_head_response.status_code == 200
+    assert monitor_head_response.content == b""
+
 
 def test_unknown_league_is_rejected_without_upstream_request():
     response = client.get("/api/fixtures?league=unknown&date=2026-09-01")
