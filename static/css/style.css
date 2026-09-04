@@ -357,12 +357,8 @@ button { color: inherit; }
 .side-pill { margin-left: auto; color: #64748b; font-size: .65rem; }
 
 .stats-list { padding-top: 12px; display: grid; gap: 13px; }
-.stat-highlights { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
-.stat-highlight { min-height: 64px; padding: 9px; display: grid; grid-template-columns: 1fr minmax(70px, auto) 1fr; align-items: center; gap: 7px; border: 1px solid var(--line); border-radius: 9px; background: #151e2d; text-align: center; }
-.stat-highlight strong { font-size: 1.05rem; }
-.stat-highlight span { color: var(--muted); font-size: .65rem; }
-.stat-highlight.xg { border-color: rgba(167, 139, 250, .42); background: linear-gradient(135deg, rgba(91, 33, 182, .16), #151e2d); }
-.stat-row { display: grid; gap: 6px; }
+.stat-row { padding: 11px 13px; display: grid; gap: 8px; border: 1px solid var(--line); border-radius: 10px; background: #151e2d; }
+.stat-row.xg { border-color: rgba(167, 139, 250, .42); background: linear-gradient(135deg, rgba(91, 33, 182, .16), #151e2d); }
 .stat-labels { display: grid; grid-template-columns: 42px 1fr 42px; text-align: center; align-items: center; font-size: .77rem; font-weight: 750; }
 .stat-title { color: var(--muted); font-weight: 600; }
 .stat-track { height: 5px; display: flex; gap: 2px; border-radius: 5px; overflow: hidden; background: var(--surface-3); }
@@ -573,6 +569,8 @@ button { color: inherit; }
   text-align: left;
   cursor: pointer;
 }
+.league-menu-group { padding: 10px 8px 5px; color: var(--blue); font-size: .61rem; font-weight: 900; letter-spacing: .09em; text-transform: uppercase; }
+.league-menu-group:first-child { padding-top: 5px; }
 .league-option:hover, .league-option:focus-visible { background: var(--surface-3); outline: none; }
 .league-option.selected { background: rgba(56, 189, 248, .12); color: #fff; }
 .league-option-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: .82rem; font-weight: 750; }
@@ -719,7 +717,6 @@ button { color: inherit; }
   .player-dialog-image { width: 88px; height: 88px; }
   .player-stat-grid { grid-template-columns: repeat(2, 1fr); }
   .match-info-grid { grid-template-columns: 1fr; }
-  .stat-highlights { grid-template-columns: 1fr; }
   .h2h-match-row { grid-template-columns: 68px minmax(0, 1fr) auto; }
   .team-dialog-body { padding: 17px; }
   .team-dialog-hero { grid-template-columns: 65px minmax(0, 1fr) auto; gap: 10px; padding: 13px; }

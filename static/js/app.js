@@ -8,24 +8,24 @@ const leagueSlugs = {
 };
 const leagueChoices = {
   all: { name: "Tüm Ligler", symbol: "🌍" },
-  superlig: { name: "Trendyol Süper Lig", logo: "https://a.espncdn.com/i/leaguelogos/soccer/500/18.png" },
-  premier: { name: "Premier League", logo: "https://a.espncdn.com/i/leaguelogos/soccer/500/23.png" },
-  championship: { name: "EFL Championship", logo: "https://a.espncdn.com/i/leaguelogos/soccer/500/24.png" },
-  laliga: { name: "La Liga", logo: "https://a.espncdn.com/i/leaguelogos/soccer/500/15.png" },
-  laliga2: { name: "La Liga 2", logo: "https://a.espncdn.com/i/leaguelogos/soccer/500/107.png" },
-  seriea: { name: "Serie A", logo: "https://a.espncdn.com/i/leaguelogos/soccer/500/12.png" },
-  serieb: { name: "Serie B", logo: "https://a.espncdn.com/i/leaguelogos/soccer/500/99.png" },
-  bundesliga: { name: "Bundesliga", logo: "https://a.espncdn.com/i/leaguelogos/soccer/500/10.png" },
-  bundesliga2: { name: "2. Bundesliga", logo: "https://a.espncdn.com/i/leaguelogos/soccer/500/97.png" },
-  ligue1: { name: "Ligue 1", logo: "https://a.espncdn.com/i/leaguelogos/soccer/500/9.png" },
-  ligue2: { name: "Ligue 2", logo: "https://a.espncdn.com/i/leaguelogos/soccer/500/96.png" },
-  belgium: { name: "Belçika Pro Ligi", logo: "https://a.espncdn.com/i/leaguelogos/soccer/500/6.png" },
-  eredivisie: { name: "Eredivisie", logo: "https://a.espncdn.com/i/leaguelogos/soccer/500/11.png" },
-  ligaportugal: { name: "Liga Portugal", logo: "https://a.espncdn.com/i/leaguelogos/soccer/500/14.png" },
-  saudi: { name: "Suudi Pro Ligi", logo: "https://a.espncdn.com/i/leaguelogos/soccer/500/2488.png" },
-  ucl: { name: "UEFA Şampiyonlar Ligi", logo: "https://a.espncdn.com/i/leaguelogos/soccer/500/2.png" },
-  uel: { name: "UEFA Avrupa Ligi", logo: "https://a.espncdn.com/i/leaguelogos/soccer/500/2310.png" },
-  uecl: { name: "UEFA Konferans Ligi", logo: "https://a.espncdn.com/i/leaguelogos/soccer/500/20296.png" },
+  superlig: { name: "Trendyol Süper Lig", group: "Üst Ligler", logo: "https://a.espncdn.com/i/leaguelogos/soccer/500/18.png" },
+  premier: { name: "Premier League", group: "Üst Ligler", logo: "https://a.espncdn.com/i/leaguelogos/soccer/500/23.png" },
+  laliga: { name: "La Liga", group: "Üst Ligler", logo: "https://a.espncdn.com/i/leaguelogos/soccer/500/15.png" },
+  seriea: { name: "Serie A", group: "Üst Ligler", logo: "https://a.espncdn.com/i/leaguelogos/soccer/500/12.png" },
+  bundesliga: { name: "Bundesliga", group: "Üst Ligler", logo: "https://a.espncdn.com/i/leaguelogos/soccer/500/10.png" },
+  ligue1: { name: "Ligue 1", group: "Üst Ligler", logo: "https://a.espncdn.com/i/leaguelogos/soccer/500/9.png" },
+  championship: { name: "EFL Championship", group: "2. Ligler", logo: "https://a.espncdn.com/i/leaguelogos/soccer/500/24.png" },
+  laliga2: { name: "La Liga 2", group: "2. Ligler", logo: "https://a.espncdn.com/i/leaguelogos/soccer/500/107.png" },
+  serieb: { name: "Serie B", group: "2. Ligler", logo: "https://a.espncdn.com/i/leaguelogos/soccer/500/99.png" },
+  bundesliga2: { name: "2. Bundesliga", group: "2. Ligler", logo: "https://a.espncdn.com/i/leaguelogos/soccer/500/97.png" },
+  ligue2: { name: "Ligue 2", group: "2. Ligler", logo: "https://a.espncdn.com/i/leaguelogos/soccer/500/96.png" },
+  belgium: { name: "Belçika Pro Ligi", group: "Diğer Ligler", logo: "https://a.espncdn.com/i/leaguelogos/soccer/500/6.png" },
+  eredivisie: { name: "Eredivisie", group: "Diğer Ligler", logo: "https://a.espncdn.com/i/leaguelogos/soccer/500/11.png" },
+  ligaportugal: { name: "Liga Portugal", group: "Diğer Ligler", logo: "https://a.espncdn.com/i/leaguelogos/soccer/500/14.png" },
+  saudi: { name: "Suudi Pro Ligi", group: "Diğer Ligler", logo: "https://a.espncdn.com/i/leaguelogos/soccer/500/2488.png" },
+  ucl: { name: "UEFA Şampiyonlar Ligi", group: "UEFA", logo: "https://a.espncdn.com/i/leaguelogos/soccer/500/2.png" },
+  uel: { name: "UEFA Avrupa Ligi", group: "UEFA", logo: "https://a.espncdn.com/i/leaguelogos/soccer/500/2310.png" },
+  uecl: { name: "UEFA Konferans Ligi", group: "UEFA", logo: "https://a.espncdn.com/i/leaguelogos/soccer/500/20296.png" },
 };
 const preferenceKeys = {
   teams: "canlispor.favoriteTeams",
@@ -38,6 +38,7 @@ const fixtureCacheStorageKey = "canlispor.fixtureCache.v1";
 const fixtureMemoryCache = new Map();
 const fixturePrefetches = new Set();
 const fixtureCacheLimit = 18;
+const xgStatTitle = "Beklenen Gol (xG)";
 
 const state = {
   activeLeague: "all",
@@ -184,7 +185,13 @@ function updateLeaguePicker() {
 }
 
 function renderLeagueMenu() {
-  const options = Object.entries(leagueChoices).map(([key, choice]) => {
+  let lastGroup = "";
+  const options = [];
+  for (const [key, choice] of Object.entries(leagueChoices)) {
+    if (choice.group && choice.group !== lastGroup) {
+      options.push(node("div", "league-menu-group", choice.group));
+      lastGroup = choice.group;
+    }
     const button = node("button", "league-option");
     button.type = "button";
     button.role = "option";
@@ -196,8 +203,8 @@ function renderLeagueMenu() {
       setLeagueMenu(false);
       elements.leagueSelectButton.focus();
     });
-    return button;
-  });
+    options.push(button);
+  }
   elements.leagueMenu.replaceChildren(...options);
   updateLeaguePicker();
 }
@@ -908,16 +915,8 @@ function renderStats(stats) {
     elements.statsContainer.replaceChildren(emptyState("Maç istatistikleri mevcut değil."));
     return;
   }
-  const featuredTitles = new Set(["Beklenen Gol (xG)", "Topla Oynama (%)", "Toplam Şut", "İsabetli Şut"]);
-  const featuredStats = stats.filter(stat => featuredTitles.has(stat.title));
-  const highlights = node("div", "stat-highlights");
-  for (const stat of featuredStats) {
-    const card = node("div", `stat-highlight${stat.title.includes("xG") ? " xg" : ""}`);
-    card.append(node("strong", "", stat.home), node("span", "", stat.title), node("strong", "", stat.away));
-    highlights.append(card);
-  }
   const rows = stats.map(stat => {
-    const row = node("div", "stat-row");
+    const row = node("div", `stat-row${stat.title === xgStatTitle ? " xg" : ""}`);
     const labels = node("div", "stat-labels");
     labels.append(node("span", "", stat.home), node("span", "stat-title", stat.title), node("span", "", stat.away));
     const homeValue = numericValue(stat.home);
@@ -932,7 +931,7 @@ function renderStats(stats) {
     row.append(labels, track);
     return row;
   });
-  elements.statsContainer.replaceChildren(...(featuredStats.length ? [highlights] : []), ...rows);
+  elements.statsContainer.replaceChildren(...rows);
 }
 
 const playerStatLabels = {

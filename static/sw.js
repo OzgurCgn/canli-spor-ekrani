@@ -1,6 +1,6 @@
 "use strict";
 
-const CACHE_NAME = "canlispor-v3.3";
+const CACHE_NAME = "canlispor-v3.3.1";
 const APP_SHELL = ["/", "/css/style.css", "/js/app.js", "/manifest.webmanifest", "/images/app-icon.svg", "/images/app-icon-192.png", "/images/app-icon-512.png"];
 
 self.addEventListener("install", event => {
