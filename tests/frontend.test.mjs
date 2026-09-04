@@ -88,6 +88,17 @@ test("feature pack includes follow, grouping, leaders, xg and head-to-head UI", 
   assert.match(source, /loadHeadToHead/);
 });
 
+test("notifications use Web Push instead of page-only Notification objects", () => {
+  const worker = fs.readFileSync(new URL("../static/sw.js", import.meta.url), "utf8");
+  assert.match(source, /pushManager\.subscribe/);
+  assert.match(source, /\/api\/push\/preferences/);
+  assert.doesNotMatch(source, /new Notification\s*\(/);
+  assert.match(worker, /addEventListener\("push"/);
+  assert.match(worker, /showNotification/);
+  assert.match(worker, /addEventListener\("notificationclick"/);
+  assert.match(worker, /openWindow/);
+});
+
 test("desktop date control uses a browser-independent calendar", () => {
   assert.match(source, /function renderCalendar\(\)/);
   assert.match(source, /calendarPopover/);

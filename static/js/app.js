@@ -30,8 +30,9 @@ const leagueChoices = {
 const preferenceKeys = {
   teams: "canlispor.favoriteTeams",
   leagues: "canlispor.favoriteLeagues",
-  notifications: "canlispor.notifications",
+  notifications: "nabiz90.push.allMatches",
   followedMatches: "canlispor.followedMatches",
+  followedMatchDetails: "nabiz90.push.followedMatchDetails.v1",
   overviewGrouping: "canlispor.overviewGrouping",
 };
 const fixtureCacheStorageKey = "canlispor.fixtureCache.v1";
@@ -58,6 +59,11 @@ const state = {
   favoriteLeagues: new Set(),
   notificationsEnabled: false,
   followedMatches: new Set(),
+  followedMatchDetails: new Map(),
+  pushRegistration: null,
+  pushSubscription: null,
+  pushSyncing: null,
+  pushPreferenceSignature: "",
   fixtureRequest: 0,
   fixtureController: null,
   fixtureRefreshTimer: null,
@@ -118,12 +124,22 @@ function storedSet(storage, key) {
   }
 }
 
+function storedMap(storage, key) {
+  try {
+    const value = JSON.parse(storage.getItem(key) || "{}");
+    return new Map(value && typeof value === "object" && !Array.isArray(value) ? Object.entries(value) : []);
+  } catch (_) {
+    return new Map();
+  }
+}
+
 function savePreferences() {
   try {
     localStorage.setItem(preferenceKeys.teams, JSON.stringify([...state.favoriteTeams]));
     localStorage.setItem(preferenceKeys.leagues, JSON.stringify([...state.favoriteLeagues]));
     localStorage.setItem(preferenceKeys.notifications, String(state.notificationsEnabled));
     localStorage.setItem(preferenceKeys.followedMatches, JSON.stringify([...state.followedMatches]));
+    localStorage.setItem(preferenceKeys.followedMatchDetails, JSON.stringify(Object.fromEntries(state.followedMatchDetails)));
     localStorage.setItem(preferenceKeys.overviewGrouping, state.overviewGrouping);
   } catch (_) { /* Preferences are optional when storage is unavailable. */ }
 }
@@ -449,6 +465,110 @@ function isFollowedMatch(match) {
   return Boolean(match?.id && state.followedMatches.has(String(match.id)));
 }
 
+function followedMatchData(match) {
+  return {
+    id: String(match.id),
+    leagueSlug: String(match.leagueSlug || ""),
+    matchDate: String(match.matchDate || state.selectedDate),
+    startTime: String(match.startTime || ""),
+    homeTeam: String(match.homeTeam || "Ev Sahibi"),
+    awayTeam: String(match.awayTeam || "Deplasman"),
+  };
+}
+
+function rememberFollowedMatch(match) {
+  if (match?.id && state.followedMatches.has(String(match.id))) {
+    state.followedMatchDetails.set(String(match.id), followedMatchData(match));
+  }
+}
+
+function activeFollowedMatchData() {
+  return [...state.followedMatches]
+    .map(matchId => state.followedMatchDetails.get(String(matchId)))
+    .filter(Boolean);
+}
+
+function supportsWebPush() {
+  return "Notification" in window && "serviceWorker" in navigator && "PushManager" in window;
+}
+
+function urlBase64ToUint8Array(value) {
+  const padding = "=".repeat((4 - (value.length % 4)) % 4);
+  const base64 = (value + padding).replace(/-/g, "+").replace(/_/g, "/");
+  const raw = window.atob(base64);
+  return Uint8Array.from([...raw].map(character => character.charCodeAt(0)));
+}
+
+async function ensurePushSubscription(requestPermission = false) {
+  if (!supportsWebPush()) throw new Error("Bu tarayıcı arka plan bildirimlerini desteklemiyor.");
+  if (Notification.permission === "default" && requestPermission) await Notification.requestPermission();
+  if (Notification.permission !== "granted") throw new Error("Bildirim izni verilmedi.");
+
+  const registration = state.pushRegistration || await navigator.serviceWorker.ready;
+  state.pushRegistration = registration;
+  let subscription = await registration.pushManager.getSubscription();
+  if (!subscription) {
+    const config = await requestJSON("/api/push/public-key");
+    if (!config.enabled || !config.publicKey) throw new Error("Bildirim servisi şu anda hazır değil.");
+    subscription = await registration.pushManager.subscribe({
+      userVisibleOnly: true,
+      applicationServerKey: urlBase64ToUint8Array(config.publicKey),
+    });
+  }
+  state.pushSubscription = subscription;
+  return subscription;
+}
+
+async function syncPushPreferences(options = {}) {
+  if (state.pushSyncing) return state.pushSyncing;
+  state.pushSyncing = (async () => {
+    let subscription = state.pushSubscription;
+    if (!subscription && (state.notificationsEnabled || state.followedMatches.size)) {
+      subscription = await ensurePushSubscription(Boolean(options.requestPermission));
+    }
+    if (!subscription) return false;
+
+    const followedMatches = activeFollowedMatchData();
+    if (!state.notificationsEnabled && state.followedMatches.size > followedMatches.length) return false;
+    const signature = JSON.stringify({ allMatches: state.notificationsEnabled, followedMatches });
+    if (!options.force && signature === state.pushPreferenceSignature) return true;
+    if (!state.notificationsEnabled && !followedMatches.length) {
+      const response = await fetch("/api/push/subscription", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ endpoint: subscription.endpoint }),
+      });
+      if (!response.ok) throw new Error("Bildirim aboneliği kapatılamadı.");
+      await subscription.unsubscribe();
+      state.pushSubscription = null;
+      state.pushPreferenceSignature = signature;
+      return true;
+    }
+
+    const response = await fetch("/api/push/preferences", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        subscription: subscription.toJSON(),
+        allMatches: state.notificationsEnabled,
+        followedMatches,
+      }),
+    });
+    if (!response.ok) {
+      let payload = null;
+      try { payload = await response.json(); } catch (_) { payload = null; }
+      throw new Error(payload?.detail || "Bildirim tercihleri kaydedilemedi.");
+    }
+    state.pushPreferenceSignature = signature;
+    return true;
+  })();
+  try {
+    return await state.pushSyncing;
+  } finally {
+    state.pushSyncing = null;
+  }
+}
+
 function updateStageFollowButton() {
   const active = isFollowedMatch(state.selectedMatch);
   elements.stageFollowButton.classList.toggle("active", active);
@@ -456,30 +576,28 @@ function updateStageFollowButton() {
   elements.stageFollowButton.textContent = active ? "🔔 Takip ediliyor" : "🔔 Maçı takip et";
 }
 
-async function enableNotificationsForFollow() {
-  if (!("Notification" in window)) return false;
-  if (Notification.permission === "default") await Notification.requestPermission();
-  if (Notification.permission !== "granted") return false;
-  state.notificationsEnabled = true;
-  updateNotificationButton();
-  return true;
-}
-
 async function toggleFollowedMatch(match) {
   if (!match?.id) return;
   const key = String(match.id);
   if (state.followedMatches.has(key)) {
     state.followedMatches.delete(key);
+    state.followedMatchDetails.delete(key);
     showToast(`${match.homeTeam} - ${match.awayTeam} takibi kapatıldı.`);
   } else {
     state.followedMatches.add(key);
-    const enabled = await enableNotificationsForFollow();
-    showToast(enabled ? "Maç bildirimleri açıldı." : "Maç takipte; bildirim izni tarayıcı ayarından açılabilir.");
+    rememberFollowedMatch(match);
   }
   savePreferences();
   updateStageFollowButton();
   renderMatches();
   if (!state.selectedMatchId) renderDayOverview(visibleMatches());
+  try {
+    await syncPushPreferences({ requestPermission: state.followedMatches.has(key) });
+    showToast(state.followedMatches.has(key) ? "Bu maç için arka plan bildirimleri açıldı." : "Maç takibi kapatıldı.");
+  } catch (error) {
+    showToast(`${state.followedMatches.has(key) ? "Maç takipte; " : ""}${error.message}`);
+  }
+  updateNotificationButton();
 }
 
 function followMatchButton(match) {
@@ -497,58 +615,46 @@ function followMatchButton(match) {
 }
 
 async function toggleNotifications() {
-  if (!("Notification" in window)) {
-    showToast("Bu tarayıcı bildirimleri desteklemiyor.");
+  if (!supportsWebPush()) {
+    showToast("Bu tarayıcı arka plan bildirimlerini desteklemiyor.");
     return;
   }
   if (!state.notificationsEnabled) {
-    const permission = await Notification.requestPermission();
-    if (permission !== "granted") {
-      showToast("Bildirim izni verilmedi.");
-      return;
+    try {
+      await ensurePushSubscription(true);
+      state.notificationsEnabled = true;
+      await syncPushPreferences();
+      showToast("Tüm maçların arka plan bildirimleri açıldı.");
+    } catch (error) {
+      state.notificationsEnabled = false;
+      showToast(error.message);
     }
-    state.notificationsEnabled = true;
-    showToast(state.followedMatches.size ? "Takip edilen maçların bildirimleri açıldı." : "Bildirim açık; maç kartındaki zil ile takip seçebilirsin.");
   } else {
     state.notificationsEnabled = false;
-    showToast("Canlı gol bildirimleri kapatıldı.");
+    try {
+      await syncPushPreferences();
+      showToast(state.followedMatches.size ? "Tüm maçlar kapatıldı; seçili maç bildirimleri açık." : "Tüm bildirimler kapatıldı.");
+    } catch (error) {
+      showToast(error.message);
+    }
   }
   savePreferences();
   updateNotificationButton();
 }
 
 function updateNotificationButton() {
-  const active = state.notificationsEnabled && "Notification" in window && Notification.permission === "granted";
-  state.notificationsEnabled = active;
+  const permission = "Notification" in window ? Notification.permission : "denied";
+  if (permission === "denied") state.notificationsEnabled = false;
+  const active = state.notificationsEnabled && permission === "granted";
+  const partial = !active && state.followedMatches.size > 0 && permission === "granted";
   elements.notificationButton.classList.toggle("active", active);
+  elements.notificationButton.classList.toggle("partial", partial);
   elements.notificationButton.setAttribute("aria-pressed", String(active));
-}
-
-function notifyScoreChanges(previousMatches, matches) {
-  if (!state.notificationsEnabled || !("Notification" in window) || Notification.permission !== "granted") return;
-  for (const match of matches) {
-    if (!isFollowedMatch(match)) continue;
-    const previous = previousMatches.get(match.id);
-    if (!previous) continue;
-    const notification = (title, tag) => new Notification(title, {
-      body: `${match.league} • ${match.minute}`,
-      icon: match.homeLogo || match.awayLogo || "/images/app-icon.svg",
-      tag: `${tag}-${match.id}`,
-    });
-    if (previous.score !== match.score && match.status !== "NS") {
-      notification(`Gol! ${match.homeTeam} ${match.score} ${match.awayTeam}`, "goal");
-    }
-    const previousReds = Number(previous.homeRedCards || 0) + Number(previous.awayRedCards || 0);
-    const currentReds = Number(match.homeRedCards || 0) + Number(match.awayRedCards || 0);
-    if (currentReds > previousReds) notification(`Kırmızı kart: ${match.homeTeam} - ${match.awayTeam}`, "red-card");
-    if (previous.status === "NS" && match.status === "LIVE") notification(`Maç başladı: ${match.homeTeam} - ${match.awayTeam}`, "kickoff");
-    if (previous.status !== "FT" && match.status === "FT") notification(`Maç sona erdi: ${match.homeTeam} ${match.score} ${match.awayTeam}`, "full-time");
-    const phase = normalizeSearch(match.statusDetail);
-    const oldPhase = normalizeSearch(previous.statusDetail);
-    if (phase !== oldPhase && (phase === "ht" || phase.includes("half time") || phase.includes("devre"))) {
-      notification(`Devre arası: ${match.homeTeam} ${match.score} ${match.awayTeam}`, "half-time");
-    }
-  }
+  const label = elements.notificationButton.querySelector("span");
+  if (label) label.textContent = active ? "Tümü açık" : (partial ? "Seçili maçlar" : "Bildirim");
+  elements.notificationButton.title = active
+    ? "Tüm maç bildirimlerini kapat"
+    : (partial ? "Seçili maçlar açık; tüm maç bildirimlerini aç" : "Tüm maç bildirimlerini aç");
 }
 
 function setFixturesUpdating(active) {
@@ -559,7 +665,11 @@ function setFixturesUpdating(active) {
 
 function applyFixtureData(data, previousMatches = new Map(), announceChanges = false) {
   state.matches = data.matches || [];
-  if (announceChanges) notifyScoreChanges(previousMatches, state.matches);
+  for (const match of state.matches) rememberFollowedMatch(match);
+  if (state.followedMatches.size) savePreferences();
+  if (state.pushSubscription && (state.notificationsEnabled || state.followedMatches.size)) {
+    syncPushPreferences().catch(() => {});
+  }
   renderMatches();
   renderTicker();
   updateLiveCount();
@@ -1580,6 +1690,7 @@ function init() {
   state.favoriteTeams = storedSet(localStorage, preferenceKeys.teams);
   state.favoriteLeagues = storedSet(localStorage, preferenceKeys.leagues);
   state.followedMatches = storedSet(localStorage, preferenceKeys.followedMatches);
+  state.followedMatchDetails = storedMap(localStorage, preferenceKeys.followedMatchDetails);
   try { state.overviewGrouping = localStorage.getItem(preferenceKeys.overviewGrouping) === "league" ? "league" : "status"; } catch (_) { state.overviewGrouping = "status"; }
   try { state.notificationsEnabled = localStorage.getItem(preferenceKeys.notifications) === "true"; } catch (_) { state.notificationsEnabled = false; }
   const urlState = parseURLState(window.location.search);
@@ -1611,7 +1722,17 @@ function init() {
   });
   if ("serviceWorker" in navigator) {
     navigator.serviceWorker.register("/sw.js", { updateViaCache: "none" })
-      .then(registration => registration.update())
+      .then(async registration => {
+        state.pushRegistration = registration;
+        await registration.update();
+        if (supportsWebPush() && Notification.permission === "granted") {
+          state.pushSubscription = await registration.pushManager.getSubscription();
+          if (state.notificationsEnabled || state.followedMatches.size) {
+            try { await syncPushPreferences(); } catch (_) { /* Retry on the next visit or preference change. */ }
+          }
+          updateNotificationButton();
+        }
+      })
       .catch(() => {});
   }
 }

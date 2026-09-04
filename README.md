@@ -2,7 +2,7 @@
 
 Nabız90; farklı liglerdeki fikstürleri, canlı skorları, maç olaylarını, kadroları, istatistikleri ve puan durumunu tek ekranda sunan responsive bir futbol dashboard'udur. FastAPI backend, ESPN'in herkese açık web uç noktalarından aldığı veriyi normalize eder; framework kullanmayan frontend ise veriyi güvenli DOM işlemleriyle gösterir.
 
-**[Canlı demoyu aç](https://canli-spor-ekrani.onrender.com/)**
+**[Canlı demoyu aç](https://nabiz90.onrender.com/)**
 
 ## Öne çıkan özellikler
 
@@ -18,7 +18,7 @@ Nabız90; farklı liglerdeki fikstürleri, canlı skorları, maç olaylarını, 
 - Takım profili, lig derecesi, form, yaklaşan maçlar ve sezon kadrosu
 - Sekmeli maç merkezi ve 15 gelişmiş takım istatistiği
 - Veri kaynağında bulunduğunda xG ve öne çıkan istatistik kartları
-- Maça özel takip; gol, kırmızı kart, devre ve maç sonu bildirimleri
+- Site kapalıyken de çalışan Web Push; tüm maçlar veya maça özel takip, gol, başlangıç, kırmızı kart, devre ve maç sonu bildirimleri
 - Takım/lig araması ve ana sayfada duruma ya da lige göre gruplama
 - Bu sezonun geçmiş karşılaşmaları ile iç saha/deplasman performansı
 - Lig gol krallığı ve asist liderleri
@@ -47,9 +47,11 @@ canli-spor-ekrani/
 │   │   ├── fixtures.py         # Günlük fikstür
 │   │   ├── matches.py          # Maç ayrıntısı
 │   │   ├── standings.py        # Puan durumu
+│   │   ├── push.py             # Push aboneliği ve tercih uç noktaları
 │   │   └── teams.py            # Takım profili, form ve kadro
 │   ├── services/
-│   │   └── espn.py             # HTTP istemcisi, cache ve veri parser'ları
+│   │   ├── espn.py             # HTTP istemcisi, cache ve veri parser'ları
+│   │   └── push.py             # Arka plan maç izleyicisi ve Web Push gönderimi
 │   └── utils/
 │       └── formatting.py       # Türkiye saat dilimi ve tarih formatları
 ├── static/
@@ -64,14 +66,15 @@ canli-spor-ekrani/
 └── requirements.txt
 ```
 
-Frontend → FastAPI → ESPN akışında dış veri doğrudan tarayıcıya aktarılmaz. Backend, takım taraflarını ID üzerinden eşleştirir, olayları standart bir modele dönüştürür ve kısa süreli bellekte önbelleğe alır.
+Frontend → FastAPI → ESPN akışında dış veri doğrudan tarayıcıya aktarılmaz. Backend, takım taraflarını ID üzerinden eşleştirir, olayları standart bir modele dönüştürür ve kısa süreli bellekte önbelleğe alır. Web Push abonelikleri ile son maç durumları Redis/Valkey uyumlu Key Value servisinde tutulur.
 
 ```mermaid
 flowchart LR
     UI[Responsive PWA] --> API[FastAPI]
     API --> Cache[TTL + stale cache]
     Cache --> ESPN[ESPN web endpoints]
-    API --> Team[Match, standings and team parsers]
+    API --> Push[Web Push watcher]
+    Push --> KV[Key Value]
 ```
 
 ## Yerel kurulum
@@ -119,8 +122,17 @@ docker run --rm -p 8000:8000 nabiz90
 | `GET` | `/api/leaders?league=superlig` | Gol ve asist liderleri |
 | `GET` | `/api/head-to-head?home_id=...&away_id=...&league_slug=tur.1` | Takımların bu sezonki karşılaşmaları |
 | `GET` | `/api/team-detail?team_id=432&league_slug=tur.1` | Takım profili, form, fikstür ve kadro |
+| `GET` | `/api/push/public-key` | Web Push yapılandırması |
+| `POST` | `/api/push/preferences` | Cihaz aboneliği ve bildirim tercihleri |
+| `DELETE` | `/api/push/subscription` | Cihaz aboneliğini kapatma |
 | `GET` | `/api/health` | Sağlık kontrolü |
 | `GET` | `/health` | Harici uptime monitörü için hafif sağlık kontrolü |
+
+## Arka plan bildirimleri
+
+Gerçek Web Push için sunucuda `REDIS_URL`, `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY` ve `VAPID_SUBJECT` ortam değişkenleri gerekir. Ana çan tüm desteklenen maçları; maç kartındaki çan yalnız seçilen maçı takip eder. Aynı kullanıcı telefon ve bilgisayarda ayrı ayrı izin vermelidir. Android'de Chrome'dan kurulan PWA bildirimleri uygulama bildirimi gibi görünür. iPhone/iPad'de Web Push için siteyi Ana Ekran'a eklemek ve izni kurulu uygulama içinden vermek gerekir.
+
+Render'ın ücretsiz Key Value servisi yeniden başlatıldığında belleğini kaybedebilir. Açık tercihi olan istemci, site bir sonraki açıldığında aboneliğini otomatik olarak yeniden kaydeder.
 
 ## Testler
 

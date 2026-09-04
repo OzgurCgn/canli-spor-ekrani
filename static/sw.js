@@ -1,6 +1,6 @@
 "use strict";
 
-const CACHE_NAME = "nabiz90-v1";
+const CACHE_NAME = "nabiz90-v2";
 const APP_SHELL = ["/", "/css/style.css", "/js/app.js", "/manifest.webmanifest", "/images/app-icon.svg", "/images/app-icon-192.png", "/images/app-icon-512.png"];
 
 self.addEventListener("install", event => {
@@ -12,9 +12,37 @@ self.addEventListener("activate", event => {
   event.waitUntil(
     caches.keys()
       .then(keys => Promise.all(keys.filter(key => key !== CACHE_NAME).map(key => caches.delete(key))))
-      .then(() => self.clients.claim())
-      .then(() => self.clients.matchAll({ type: "window" }))
-      .then(clients => Promise.all(clients.map(client => client.navigate(client.url)))),
+      .then(() => self.clients.claim()),
+  );
+});
+
+self.addEventListener("push", event => {
+  let payload = {};
+  try { payload = event.data?.json() || {}; } catch (_) { payload = { body: event.data?.text() || "Yeni maç gelişmesi" }; }
+  const title = payload.title || "Nabız90";
+  event.waitUntil(self.registration.showNotification(title, {
+    body: payload.body || "Yeni maç gelişmesi",
+    icon: payload.icon || "/images/app-icon-192.png",
+    badge: "/images/app-icon-192.png",
+    tag: payload.tag || "nabiz90-match-update",
+    renotify: true,
+    data: { url: payload.url || "/" },
+  }));
+});
+
+self.addEventListener("notificationclick", event => {
+  event.notification.close();
+  const target = new URL(event.notification.data?.url || "/", self.location.origin).href;
+  event.waitUntil(
+    self.clients.matchAll({ type: "window", includeUncontrolled: true }).then(async clients => {
+      for (const client of clients) {
+        if (new URL(client.url).origin === self.location.origin) {
+          await client.navigate(target);
+          return client.focus();
+        }
+      }
+      return self.clients.openWindow(target);
+    }),
   );
 });
 
