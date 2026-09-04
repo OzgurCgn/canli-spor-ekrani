@@ -1,4 +1,4 @@
-"""Canlı Spor Ekranı application package."""
+"""Nabız90 application package."""
 
 from app.main import app
 

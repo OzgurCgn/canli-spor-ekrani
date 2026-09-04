@@ -1,7 +1,7 @@
 {
-  "name": "CanlıSpor",
-  "short_name": "CanlıSpor",
-  "description": "Canlı futbol skorları, maç detayları, kadrolar ve puan durumu.",
+  "name": "Nabız90",
+  "short_name": "Nabız90",
+  "description": "Futbolun canlı nabzı: skorlar, maç detayları, kadrolar ve puan durumu.",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#0b1220",

@@ -22,9 +22,9 @@ async def lifespan(_: FastAPI):
 
 
 app = FastAPI(
-    title="Canlı Spor Ekranı API",
+    title="Nabız90 API",
     version="3.3.0",
-    description="ESPN verilerini kullanan canlı futbol skoru ve puan durumu API'si.",
+    description="Nabız90 için ESPN verilerini kullanan canlı futbol skoru ve puan durumu API'si.",
     lifespan=lifespan,
 )
 app.add_middleware(

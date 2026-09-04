@@ -60,13 +60,18 @@ button { color: inherit; }
 }
 
 .brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
   color: #fff;
   text-decoration: none;
   font-size: 1.3rem;
   font-weight: 900;
-  letter-spacing: .12em;
+  letter-spacing: .08em;
 }
-.brand span { color: var(--red); }
+.brand-mark { width: 38px; height: 38px; display: block; filter: drop-shadow(0 7px 13px rgba(0, 0, 0, .34)); }
+.brand-word { color: #fff; }
+.brand-word span { color: var(--red); }
 .topbar-actions { display: flex; align-items: center; gap: 8px; }
 .notification-button { min-height: 34px; padding: 0 11px; border: 1px solid var(--line); border-radius: 999px; background: var(--surface); color: var(--muted); cursor: pointer; font-size: .7rem; font-weight: 800; }
 .notification-button.active { border-color: rgba(74, 222, 128, .45); background: rgba(74, 222, 128, .1); color: #86efac; }

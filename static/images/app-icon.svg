@@ -1,5 +1,30 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
-  <rect width="512" height="512" rx="112" fill="#0b1220"/>
-  <circle cx="256" cy="256" r="178" fill="#116897" stroke="#38bdf8" stroke-width="10"/>
-  <text x="256" y="326" fill="#fff" stroke="#0b1220" stroke-width="7" paint-order="stroke" text-anchor="middle" font-family="Arial, sans-serif" font-size="188" font-weight="900"><tspan>C</tspan><tspan fill="#f01b2f">S</tspan></text>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-labelledby="title description">
+  <title id="title">Nabız90 logosu</title>
+  <desc id="description">N90 monogramı, nabız çizgisi ve futbol topundan oluşan logo</desc>
+  <defs>
+    <linearGradient id="background" x1="72" y1="54" x2="446" y2="466" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#17243A"/>
+      <stop offset="1" stop-color="#070A10"/>
+    </linearGradient>
+    <linearGradient id="accent" x1="84" y1="256" x2="430" y2="256" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#FF4D62"/>
+      <stop offset="1" stop-color="#F01B2F"/>
+    </linearGradient>
+    <filter id="glow" x="-30%" y="-30%" width="160%" height="160%">
+      <feGaussianBlur stdDeviation="8" result="blur"/>
+      <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+  </defs>
+  <rect x="16" y="16" width="480" height="480" rx="118" fill="url(#background)"/>
+  <rect x="17" y="17" width="478" height="478" rx="117" fill="none" stroke="#33445F" stroke-width="2"/>
+  <circle cx="256" cy="256" r="177" fill="none" stroke="#223049" stroke-width="3"/>
+  <path d="M256 79v41M256 392v41M79 256h41M392 256h41" stroke="#33445F" stroke-width="4" stroke-linecap="round"/>
+  <text x="256" y="297" fill="#F8FAFC" text-anchor="middle" font-family="Inter,Segoe UI,Arial,sans-serif" font-size="178" font-weight="900" letter-spacing="-16">N<tspan fill="#F01B2F">90</tspan></text>
+  <path d="M70 339h79l24-36 31 72 49-151 36 115h42" fill="none" stroke="#08101E" stroke-width="18" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M70 339h79l24-36 31 72 49-151 36 115h42" fill="none" stroke="url(#accent)" stroke-width="10" stroke-linecap="round" stroke-linejoin="round" filter="url(#glow)"/>
+  <g transform="translate(374 339)">
+    <circle r="52" fill="#F8FAFC" stroke="#08101E" stroke-width="8"/>
+    <path d="M0-18 18-6 11 16h-22L-18-6Z" fill="#101827"/>
+    <path d="M0-18V-42M18-6l23-8M11 16l14 21M-11 16l-14 21M-18-6l-23-8" fill="none" stroke="#101827" stroke-width="7" stroke-linecap="round"/>
+  </g>
 </svg>

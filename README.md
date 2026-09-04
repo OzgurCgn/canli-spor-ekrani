@@ -1,6 +1,6 @@
-# CanlıSpor — Canlı Futbol Dashboard'u
+# Nabız90 — Futbolun Canlı Nabzı
 
-CanlıSpor; farklı liglerdeki fikstürleri, canlı skorları, maç olaylarını, kadroları, istatistikleri ve puan durumunu tek ekranda sunan responsive bir futbol dashboard'udur. FastAPI backend, ESPN'in herkese açık web uç noktalarından aldığı veriyi normalize eder; framework kullanmayan frontend ise veriyi güvenli DOM işlemleriyle gösterir.
+Nabız90; farklı liglerdeki fikstürleri, canlı skorları, maç olaylarını, kadroları, istatistikleri ve puan durumunu tek ekranda sunan responsive bir futbol dashboard'udur. FastAPI backend, ESPN'in herkese açık web uç noktalarından aldığı veriyi normalize eder; framework kullanmayan frontend ise veriyi güvenli DOM işlemleriyle gösterir.
 
 **[Canlı demoyu aç](https://canli-spor-ekrani.onrender.com/)**
 
@@ -105,8 +105,8 @@ Uygulama `http://127.0.0.1:8000` adresinde açılır. API dokümantasyonu `http:
 ## Docker ile çalıştırma
 
 ```bash
-docker build -t canlispor .
-docker run --rm -p 8000:8000 canlispor
+docker build -t nabiz90 .
+docker run --rm -p 8000:8000 nabiz90
 ```
 
 ## API uç noktaları

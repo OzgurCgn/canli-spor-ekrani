@@ -44,7 +44,7 @@ def test_invalid_insight_parameters_are_rejected():
 def test_pwa_manifest_service_worker_and_icons_are_served():
     manifest = client.get("/manifest.webmanifest")
     assert manifest.status_code == 200
-    assert manifest.json()["short_name"] == "CanlıSpor"
+    assert manifest.json()["short_name"] == "Nabız90"
     assert client.get("/sw.js").status_code == 200
     assert client.get("/images/app-icon-192.png").status_code == 200
     assert client.get("/images/app-icon-512.png").status_code == 200
