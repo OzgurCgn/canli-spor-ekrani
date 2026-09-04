@@ -1453,11 +1453,15 @@ function bindEvents() {
   elements.todayButton.addEventListener("click", () => setDate(today()));
   elements.tomorrowButton.addEventListener("click", () => setDate(addDays(today(), 1)));
   elements.datePicker.addEventListener("change", event => { if (event.target.value) setDate(event.target.value); });
-  elements.datePickerLabel.addEventListener("click", event => {
-    if (event.target === elements.datePicker) return;
-    event.preventDefault();
+  elements.datePickerLabel.addEventListener("click", () => {
+    elements.datePicker.value = state.selectedDate;
     try { elements.datePicker.showPicker(); }
-    catch (_) { elements.datePicker.focus(); elements.datePicker.click(); }
+    catch (_) {
+      elements.datePicker.style.left = `${elements.datePickerLabel.getBoundingClientRect().left}px`;
+      elements.datePicker.focus();
+      elements.datePicker.click();
+      elements.datePicker.style.left = "-9999px";
+    }
   });
   elements.leagueSelect.addEventListener("change", event => {
     state.activeLeague = event.target.value;

@@ -25,10 +25,10 @@
     <button class="date-shortcut" id="yesterdayButton" type="button">Dün</button>
     <button class="date-shortcut active" id="todayButton" type="button">Bugün</button>
     <button class="date-shortcut" id="tomorrowButton" type="button">Yarın</button>
-    <label class="date-picker-label" id="datePickerLabel" for="datePicker">
+    <button class="date-picker-label" id="datePickerLabel" type="button" aria-label="Takvimden tarih seç">
       📅 <span id="selectedDateLabel">Tarih seç</span>
-      <input id="datePicker" class="date-picker" type="date" aria-label="Tarih seç">
-    </label>
+    </button>
+    <input id="datePicker" class="date-picker" type="date" tabindex="-1" aria-label="Tarih seç">
     <button class="icon-button" id="nextDay" type="button" aria-label="Sonraki gün">›</button>
   </nav>
 
