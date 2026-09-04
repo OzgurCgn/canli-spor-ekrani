@@ -1,6 +1,6 @@
 "use strict";
 
-const CACHE_NAME = "canlispor-v3.3.5";
+const CACHE_NAME = "canlispor-v3.3.6";
 const APP_SHELL = ["/", "/css/style.css", "/js/app.js", "/manifest.webmanifest", "/images/app-icon.svg", "/images/app-icon-192.png", "/images/app-icon-512.png"];
 
 self.addEventListener("install", event => {
@@ -12,7 +12,9 @@ self.addEventListener("activate", event => {
   event.waitUntil(
     caches.keys()
       .then(keys => Promise.all(keys.filter(key => key !== CACHE_NAME).map(key => caches.delete(key))))
-      .then(() => self.clients.claim()),
+      .then(() => self.clients.claim())
+      .then(() => self.clients.matchAll({ type: "window" }))
+      .then(clients => Promise.all(clients.map(client => client.navigate(client.url)))),
   );
 });
 
@@ -29,15 +31,13 @@ self.addEventListener("fetch", event => {
     );
     return;
   }
+  const cacheKey = event.request.mode === "navigate" ? "/" : event.request;
   event.respondWith(
-    caches.match(event.request.mode === "navigate" ? "/" : event.request).then(cached => {
-      const update = fetch(event.request)
-        .then(response => {
-          if (response.ok) caches.open(CACHE_NAME).then(cache => cache.put(event.request, response.clone()));
-          return response;
-        })
-        .catch(() => null);
-      return cached || update.then(response => response || caches.match("/"));
-    }),
+    fetch(event.request, { cache: "no-cache" })
+      .then(response => {
+        if (response.ok) caches.open(CACHE_NAME).then(cache => cache.put(cacheKey, response.clone()));
+        return response;
+      })
+      .catch(() => caches.match(cacheKey).then(cached => cached || caches.match("/"))),
   );
 });
