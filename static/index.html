@@ -28,7 +28,16 @@
     <button class="date-picker-label" id="datePickerLabel" type="button" aria-label="Takvimden tarih seç">
       📅 <span id="selectedDateLabel">Tarih seç</span>
     </button>
-    <input id="datePicker" class="date-picker" type="date" tabindex="-1" aria-label="Tarih seç">
+    <div class="calendar-popover" id="calendarPopover" role="dialog" aria-label="Tarih seç" hidden>
+      <div class="calendar-header">
+        <button id="calendarPreviousMonth" type="button" aria-label="Önceki ay">‹</button>
+        <strong id="calendarMonthLabel"></strong>
+        <button id="calendarNextMonth" type="button" aria-label="Sonraki ay">›</button>
+      </div>
+      <div class="calendar-weekdays" aria-hidden="true"><span>Pzt</span><span>Sal</span><span>Çar</span><span>Per</span><span>Cum</span><span>Cmt</span><span>Paz</span></div>
+      <div class="calendar-days" id="calendarDays"></div>
+      <button class="calendar-today" id="calendarToday" type="button">Bugüne git</button>
+    </div>
     <button class="icon-button" id="nextDay" type="button" aria-label="Sonraki gün">›</button>
   </nav>
 

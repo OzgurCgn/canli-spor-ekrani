@@ -136,25 +136,31 @@ button { color: inherit; }
   font-size: .82rem;
   font-weight: 700;
 }
-.date-picker { position: fixed; left: -9999px; bottom: 0; width: 1px; height: 1px; opacity: 0; pointer-events: none; }
-.date-picker.open {
-  position: absolute;
+.calendar-popover {
+  position: fixed;
   left: 50%;
-  top: calc(100% - 5px);
-  bottom: auto;
+  top: 118px;
   z-index: 80;
-  width: 180px;
-  height: 42px;
-  padding: 7px 10px;
-  transform: translateX(35px);
-  opacity: 1;
-  pointer-events: auto;
-  border: 1px solid var(--blue);
-  border-radius: 9px;
-  background: var(--surface-2);
+  width: min(320px, calc(100vw - 24px));
+  padding: 12px;
+  transform: translateX(-50%);
+  border: 1px solid #3a4b66;
+  border-radius: 12px;
+  background: #111827;
   color: #fff;
-  color-scheme: dark;
+  box-shadow: 0 20px 45px rgba(0, 0, 0, .55);
 }
+.calendar-header { display: grid; grid-template-columns: 36px 1fr 36px; align-items: center; gap: 8px; }
+.calendar-header strong { text-align: center; font-size: .84rem; text-transform: capitalize; }
+.calendar-header button, .calendar-today { min-height: 34px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface-2); color: #fff; cursor: pointer; }
+.calendar-weekdays, .calendar-days { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; }
+.calendar-weekdays { margin: 11px 0 5px; color: var(--muted); font-size: .61rem; font-weight: 800; text-align: center; }
+.calendar-day, .calendar-day-blank { aspect-ratio: 1; display: grid; place-items: center; }
+.calendar-day { border: 0; border-radius: 8px; background: transparent; color: #dbe6f5; cursor: pointer; font-size: .73rem; font-weight: 750; }
+.calendar-day:hover, .calendar-day:focus-visible { background: var(--surface-3); color: #fff; outline: 1px solid var(--blue); }
+.calendar-day.today { color: var(--blue); box-shadow: inset 0 0 0 1px rgba(56, 189, 248, .45); }
+.calendar-day.selected { background: var(--red); color: #fff; box-shadow: none; }
+.calendar-today { width: 100%; margin-top: 10px; color: var(--blue); font-weight: 800; }
 
 .app-shell {
   width: min(1480px, 100%);

@@ -88,7 +88,8 @@ test("feature pack includes follow, grouping, leaders, xg and head-to-head UI", 
   assert.match(source, /loadHeadToHead/);
 });
 
-test("desktop date control opens the native picker", () => {
-  assert.match(source, /datePickerLabel/);
-  assert.match(source, /datePicker\.showPicker\(\)/);
+test("desktop date control uses a browser-independent calendar", () => {
+  assert.match(source, /function renderCalendar\(\)/);
+  assert.match(source, /calendarPopover/);
+  assert.doesNotMatch(source, /\.showPicker\(\)/);
 });

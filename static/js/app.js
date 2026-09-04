@@ -51,6 +51,7 @@ const state = {
   favoritesOnly: false,
   searchQuery: "",
   overviewGrouping: "status",
+  calendarCursor: null,
   activeView: "matches",
   activeDetailTab: "overview",
   favoriteTeams: new Set(),
@@ -286,7 +287,6 @@ function setLoading(container, count = 3) {
 function updateDateControls() {
   const selected = fromISODate(state.selectedDate);
   const today = toISODate(new Date());
-  elements.datePicker.value = state.selectedDate;
   elements.selectedDateLabel.textContent = new Intl.DateTimeFormat("tr-TR", {
     day: "numeric",
     month: "long",
@@ -294,6 +294,36 @@ function updateDateControls() {
   elements.yesterdayButton.classList.toggle("active", state.selectedDate === addDays(today, -1));
   elements.todayButton.classList.toggle("active", state.selectedDate === today);
   elements.tomorrowButton.classList.toggle("active", state.selectedDate === addDays(today, 1));
+}
+
+function renderCalendar() {
+  const selected = fromISODate(state.selectedDate);
+  const cursor = state.calendarCursor || new Date(selected.getFullYear(), selected.getMonth(), 1, 12);
+  state.calendarCursor = cursor;
+  elements.calendarMonthLabel.textContent = new Intl.DateTimeFormat("tr-TR", { month: "long", year: "numeric" }).format(cursor);
+  const firstWeekday = (cursor.getDay() + 6) % 7;
+  const daysInMonth = new Date(cursor.getFullYear(), cursor.getMonth() + 1, 0).getDate();
+  const cells = Array.from({ length: firstWeekday }, () => node("span", "calendar-day-blank"));
+  const today = toISODate(new Date());
+  for (let day = 1; day <= daysInMonth; day += 1) {
+    const date = new Date(cursor.getFullYear(), cursor.getMonth(), day, 12);
+    const value = toISODate(date);
+    const button = node("button", `calendar-day${value === today ? " today" : ""}${value === state.selectedDate ? " selected" : ""}`, day);
+    button.type = "button";
+    button.setAttribute("aria-label", new Intl.DateTimeFormat("tr-TR", { day: "numeric", month: "long", year: "numeric" }).format(date));
+    button.addEventListener("click", () => {
+      elements.calendarPopover.hidden = true;
+      setDate(value);
+    });
+    cells.push(button);
+  }
+  elements.calendarDays.replaceChildren(...cells);
+}
+
+function moveCalendarMonth(amount) {
+  const cursor = state.calendarCursor || fromISODate(state.selectedDate);
+  state.calendarCursor = new Date(cursor.getFullYear(), cursor.getMonth() + amount, 1, 12);
+  renderCalendar();
 }
 
 function setDate(value) {
@@ -1430,7 +1460,8 @@ function setView(view) {
 
 function bindElements() {
   const ids = [
-    "liveCount", "mainStage", "previousDay", "yesterdayButton", "todayButton", "tomorrowButton", "datePicker", "datePickerLabel", "nextDay",
+    "liveCount", "mainStage", "previousDay", "yesterdayButton", "todayButton", "tomorrowButton", "datePickerLabel", "nextDay",
+    "calendarPopover", "calendarPreviousMonth", "calendarNextMonth", "calendarMonthLabel", "calendarDays", "calendarToday",
     "selectedDateLabel", "stagePlaceholder", "stageContent", "backToOverview", "detailsGrid", "stageMeta", "stageHomeLogo",
     "stageAwayLogo", "stageHome", "stageAway", "stageScore", "homeEventsList", "awayEventsList", "stageTag",
     "timeline", "eventCount", "statsContainer", "lineupBadge", "lineupHomeName", "lineupAwayName", "lineupHomeForm",
@@ -1452,24 +1483,23 @@ function bindEvents() {
   elements.yesterdayButton.addEventListener("click", () => setDate(addDays(today(), -1)));
   elements.todayButton.addEventListener("click", () => setDate(today()));
   elements.tomorrowButton.addEventListener("click", () => setDate(addDays(today(), 1)));
-  elements.datePicker.addEventListener("change", event => {
-    elements.datePicker.classList.remove("open");
-    if (event.target.value) setDate(event.target.value);
-  });
-  elements.datePicker.addEventListener("click", event => event.stopPropagation());
   elements.datePickerLabel.addEventListener("click", event => {
     event.stopPropagation();
-    elements.datePicker.value = state.selectedDate;
-    if (typeof elements.datePicker.showPicker === "function") {
-      try { elements.datePicker.showPicker(); return; }
-      catch (_) { /* Fall through to the visible desktop control. */ }
-    }
-    elements.datePicker.classList.toggle("open");
-    if (elements.datePicker.classList.contains("open")) {
-      elements.datePicker.focus();
+    const opening = elements.calendarPopover.hidden;
+    elements.calendarPopover.hidden = !opening;
+    if (opening) {
+      state.calendarCursor = null;
+      renderCalendar();
     }
   });
-  document.addEventListener("click", () => elements.datePicker.classList.remove("open"));
+  elements.calendarPopover.addEventListener("click", event => event.stopPropagation());
+  elements.calendarPreviousMonth.addEventListener("click", () => moveCalendarMonth(-1));
+  elements.calendarNextMonth.addEventListener("click", () => moveCalendarMonth(1));
+  elements.calendarToday.addEventListener("click", () => {
+    elements.calendarPopover.hidden = true;
+    setDate(toISODate(new Date()));
+  });
+  document.addEventListener("click", () => { elements.calendarPopover.hidden = true; });
   elements.leagueSelect.addEventListener("change", event => {
     state.activeLeague = event.target.value;
     state.selectedMatchId = null;
