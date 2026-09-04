@@ -17,3 +17,18 @@ async def get_match_detail(event_id: str = Query(..., min_length=1), league_slug
         return await espn_service.match_detail(event_id, league_slug)
     except ESPNServiceError as exc:
         raise upstream_error(exc) from exc
+
+
+@router.get("/head-to-head")
+async def get_head_to_head(
+    home_id: str = Query(..., min_length=1, max_length=20),
+    away_id: str = Query(..., min_length=1, max_length=20),
+    league_slug: str = Query(..., min_length=1),
+):
+    if not home_id.isdigit() or not away_id.isdigit() or league_slug not in ALLOWED_SLUGS:
+        raise HTTPException(status_code=422, detail="Geçersiz takım veya lig bilgisi.")
+    league = next(league for league in LEAGUE_MAP.values() if league["slug"] == league_slug)
+    try:
+        return await espn_service.head_to_head(home_id, away_id, league)
+    except ESPNServiceError as exc:
+        raise upstream_error(exc) from exc

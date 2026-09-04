@@ -3,11 +3,28 @@ from datetime import date
 
 from fastapi.testclient import TestClient
 
+from app.config import LEAGUE_MAP
 from app.main import app
-from app.services.espn import ESPNService, ESPNServiceError, fixture_cache_policy, parse_fixtures, parse_match_detail, parse_standings, parse_team_detail
+from app.services.espn import (
+    ESPNService,
+    ESPNServiceError,
+    fixture_cache_policy,
+    parse_fixtures,
+    parse_head_to_head,
+    parse_leaders_html,
+    parse_match_detail,
+    parse_standings,
+    parse_team_detail,
+)
 
 
 LEAGUE = {"slug": "tur.1", "name": "Trendyol Süper Lig"}
+
+
+def test_requested_second_tiers_and_belgium_are_supported():
+    assert {LEAGUE_MAP[key]["slug"] for key in (
+        "championship", "laliga2", "serieb", "bundesliga2", "ligue2", "belgium"
+    )} == {"eng.2", "esp.2", "ita.2", "ger.2", "fra.2", "bel.1"}
 
 
 def test_fixture_cache_policy_varies_for_past_today_and_future():
@@ -44,6 +61,24 @@ def test_fixture_parser_includes_logos_and_date():
     assert match["score"] == "vs"
     assert match["homeScore"] == "0"
     assert match["awayScore"] == "0"
+
+
+def test_fixture_parser_exposes_phase_and_red_cards_for_notifications():
+    payload = {"events": [{
+        "id": "42", "date": "2026-09-01T17:00Z",
+        "status": {"type": {"state": "in", "shortDetail": "HT"}},
+        "competitions": [{
+            "competitors": [
+                {"id": "1", "homeAway": "home", "score": "1", "team": {"id": "1", "displayName": "Home"}},
+                {"id": "2", "homeAway": "away", "score": "0", "team": {"id": "2", "displayName": "Away"}},
+            ],
+            "details": [{"redCard": True, "team": {"id": "2"}}],
+        }],
+    }]}
+    match = parse_fixtures(payload, LEAGUE)[0]
+    assert match["statusDetail"] == "HT"
+    assert match["homeRedCards"] == 0
+    assert match["awayRedCards"] == 1
 
 
 def test_fixture_parser_uses_local_logo_overrides_for_missing_espn_assets():
@@ -219,6 +254,20 @@ def test_match_detail_includes_extended_team_statistics():
     assert {item["title"]: item["home"] for item in stats}["Toplam Pas"] == "510"
 
 
+def test_match_detail_adds_xg_only_when_source_provides_it():
+    payload = {
+        "header": {"competitions": [{"competitors": [
+            {"id": "h", "homeAway": "home"}, {"id": "a", "homeAway": "away"},
+        ]}]},
+        "boxscore": {"teams": [
+            {"team": {"id": "h"}, "statistics": [{"name": "xG", "displayValue": "1.72"}]},
+            {"team": {"id": "a"}, "statistics": [{"label": "Expected Goals", "displayValue": "0.64"}]},
+        ]},
+    }
+    stats = parse_match_detail(payload)["stats"]
+    assert stats[0] == {"title": "Beklenen Gol (xG)", "home": "1.72", "away": "0.64"}
+
+
 def test_visual_lineup_contains_pitch_data_bench_stats_and_event_badges():
     payload = {
         "header": {"competitions": [{"competitors": [
@@ -285,6 +334,7 @@ def test_standings_parser_returns_dashboard_columns():
             "name": "2026/27",
             "standings": {"entries": [{
                 "team": {"id": "432", "displayName": "Galatasaray", "logos": [{"href": "gal.png"}]},
+                "note": {"description": "Şampiyonlar Ligi", "color": "#81D6AC"},
                 "stats": [
                     {"name": "rank", "displayValue": "1"},
                     {"name": "gamesPlayed", "displayValue": "3"},
@@ -303,6 +353,7 @@ def test_standings_parser_returns_dashboard_columns():
     assert row == {
         "rank": "1", "teamId": "432", "team": "Galatasaray", "logo": "gal.png", "played": "3",
         "wins": "3", "draws": "0", "losses": "0", "goalDifference": "+7", "points": "9",
+        "note": "Şampiyonlar Ligi", "noteColor": "#81D6AC",
     }
 
 
@@ -349,3 +400,43 @@ def test_team_detail_parser_returns_record_form_schedule_and_squad():
     assert result["recent"][0]["opponent"] == "Göztepe"
     assert result["upcoming"][0]["opponent"] == "Başakşehir"
     assert result["squad"][0]["name"] == "Oyuncu A"
+    assert result["performance"]["home"]["wins"] == 1
+    assert result["performance"]["home"]["goalsFor"] == 3
+
+
+def test_head_to_head_parser_summarizes_results_for_selected_team_order():
+    payload = {"events": [{
+        "id": "meeting", "date": "2026-08-01T17:00Z",
+        "competitions": [{"status": {"type": {"state": "post", "shortDetail": "FT"}}, "competitors": [
+            {"id": "2", "homeAway": "home", "score": {"displayValue": "1"}, "team": {"id": "2", "displayName": "Away"}},
+            {"id": "1", "homeAway": "away", "score": {"displayValue": "3"}, "team": {"id": "1", "displayName": "Home"}},
+        ]}],
+    }]}
+    result = parse_head_to_head(payload, "1", "2", LEAGUE)
+    assert result["homeWins"] == 1
+    assert result["draws"] == 0
+    assert result["matches"][0]["winner"] == "home"
+    assert result["matches"][0]["score"] == "1 - 3"
+
+
+def test_leaders_parser_reads_espn_embedded_statistics():
+    import json
+
+    page = {
+        "page": {"content": {"statistics": {
+            "league": {"name": "Test League"}, "dropdownYear": "2026-27",
+            "tables": [
+                {"headers": [{"type": "rank"}, {"type": "athlete"}, {"type": "team"}, {"type": "appearances"}, {"type": "totalGoals"}]},
+                {"headers": [{"type": "rank"}, {"type": "athlete"}, {"type": "team"}, {"type": "appearances"}, {"type": "goalAssists"}]},
+            ],
+            "tableRows": [
+                [[1, {"name": "Golcü", "href": "/soccer/player/_/id/10/golcu"}, {"name": "Takım", "href": "/soccer/club/_/id/20/takim"}, {"value": "3"}, {"value": "4"}]],
+                [[1, {"name": "Asistçi", "href": "/soccer/player/_/id/11/asistci"}, {"name": "Takım", "href": "/soccer/club/_/id/20/takim"}, {"value": "3"}, {"value": "2"}]],
+            ],
+        }}},
+    }
+    html = f"<script>window['__espnfitt__'] = {json.dumps(page)};</script>"
+    result = parse_leaders_html(html)
+    assert result["goals"][0]["name"] == "Golcü"
+    assert result["goals"][0]["value"] == "4"
+    assert result["assists"][0]["athleteId"] == "11"

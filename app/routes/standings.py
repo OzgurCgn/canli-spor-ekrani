@@ -16,3 +16,13 @@ async def get_standings(league: str = Query("superlig")):
         return await espn_service.standings(LEAGUE_MAP[league])
     except ESPNServiceError as exc:
         raise upstream_error(exc) from exc
+
+
+@router.get("/leaders")
+async def get_leaders(league: str = Query("superlig")):
+    if league not in LEAGUE_MAP:
+        raise HTTPException(status_code=422, detail="Desteklenmeyen lig.")
+    try:
+        return await espn_service.leaders(LEAGUE_MAP[league])
+    except ESPNServiceError as exc:
+        raise upstream_error(exc) from exc

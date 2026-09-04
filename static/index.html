@@ -63,6 +63,7 @@
           </div>
           <div class="stage-actions">
             <div class="match-tag" id="stageTag">BEKLENİYOR</div>
+            <button class="follow-match-button" id="stageFollowButton" type="button" aria-pressed="false">🔔 Maçı takip et</button>
             <button class="share-button" id="copyLinkButton" type="button">🔗 Bağlantıyı kopyala</button>
           </div>
         </div>
@@ -73,6 +74,7 @@
         <button class="match-detail-tab" type="button" data-detail-tab="timeline">Maç Akışı</button>
         <button class="match-detail-tab" type="button" data-detail-tab="lineups">Kadrolar</button>
         <button class="match-detail-tab" type="button" data-detail-tab="stats">İstatistik</button>
+        <button class="match-detail-tab" type="button" data-detail-tab="h2h">Karşılaştırma</button>
       </nav>
 
       <div class="details-grid" id="detailsGrid" hidden>
@@ -112,6 +114,11 @@
           </div>
         </section>
 
+        <section class="detail-card h2h-card" data-detail-panel="h2h" hidden>
+          <div class="card-title"><span>Geçmiş Karşılaşmalar</span><span class="card-badge">Bu sezon</span></div>
+          <div class="h2h-content" id="h2hContainer"><div class="empty-state compact">Sekme açıldığında karşılaşmalar yüklenir.</div></div>
+        </section>
+
       </div>
     </main>
 
@@ -123,10 +130,16 @@
             <option value="all">Tüm Ligler</option>
             <option value="superlig">Trendyol Süper Lig</option>
             <option value="premier">Premier League</option>
+            <option value="championship">EFL Championship</option>
             <option value="laliga">La Liga</option>
+            <option value="laliga2">La Liga 2</option>
             <option value="seriea">Serie A</option>
+            <option value="serieb">Serie B</option>
             <option value="bundesliga">Bundesliga</option>
+            <option value="bundesliga2">2. Bundesliga</option>
             <option value="ligue1">Ligue 1</option>
+            <option value="ligue2">Ligue 2</option>
+            <option value="belgium">Belçika Pro Ligi</option>
             <option value="eredivisie">Eredivisie</option>
             <option value="ligaportugal">Liga Portugal</option>
             <option value="saudi">Suudi Pro Ligi</option>
@@ -147,7 +160,9 @@
         <div class="view-tabs" role="tablist" aria-label="Görünüm">
           <button class="tab-button active" id="matchesTab" type="button" role="tab">Maçlar</button>
           <button class="tab-button" id="standingsTab" type="button" role="tab">Puan Durumu</button>
+          <button class="tab-button" id="leadersTab" type="button" role="tab">Liderler</button>
         </div>
+        <label class="match-search"><span aria-hidden="true">⌕</span><input id="matchSearch" type="search" placeholder="Takım veya lig ara" autocomplete="off"></label>
         <div class="filter-row">
           <button class="filter-button" id="liveFilter" type="button" aria-pressed="false"><span class="filter-dot"></span> Canlı</button>
           <button class="filter-button" id="favoritesFilter" type="button" aria-pressed="false">★ Favoriler</button>
@@ -155,6 +170,7 @@
       </div>
       <div class="sidebar-content" id="matchFeed" role="tabpanel"></div>
       <div class="sidebar-content standings-panel" id="standingsPanel" role="tabpanel" hidden></div>
+      <div class="sidebar-content leaders-panel" id="leadersPanel" role="tabpanel" hidden></div>
     </aside>
   </div>
 

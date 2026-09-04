@@ -1,4 +1,6 @@
 import asyncio
+import json
+import re
 import time
 from datetime import date, datetime, timedelta
 from typing import Any, Awaitable, Callable, Dict, List, Optional
@@ -55,6 +57,17 @@ def _logo_url(team: Dict[str, Any]) -> str:
     return f"https://a.espncdn.com/i/teamlogos/soccer/500/{team_id}.png" if team_id else ""
 
 
+def _score_value(competitor: Dict[str, Any]) -> str:
+    score = competitor.get("score", "0")
+    if isinstance(score, dict):
+        score = score.get("displayValue", score.get("value", "0"))
+    try:
+        number = float(score)
+        return str(int(number)) if number.is_integer() else str(number)
+    except (TypeError, ValueError):
+        return str(score or "0")
+
+
 def parse_fixtures(payload: Dict[str, Any], league: Dict[str, str]) -> List[Dict[str, Any]]:
     matches: List[Dict[str, Any]] = []
     for event in payload.get("events", []):
@@ -68,26 +81,33 @@ def parse_fixtures(payload: Dict[str, Any], league: Dict[str, str]) -> List[Dict
         home_team = home.get("team", {})
         away_team = away.get("team", {})
 
-        status_type = event.get("status", {}).get("type", {})
+        status_type = event.get("status", {}).get("type", {}) or competition.get("status", {}).get("type", {})
         raw_date = event.get("date", "")
         time_meta = format_match_time(raw_date, status_type.get("state", "pre"), status_type.get("shortDetail", ""))
         match_dt = parse_espn_datetime(raw_date)
-        score = f"{home.get('score', '0')} - {away.get('score', '0')}" if time_meta["type"] != "NS" else "vs"
+        home_score = _score_value(home)
+        away_score = _score_value(away)
+        score = f"{home_score} - {away_score}" if time_meta["type"] != "NS" else "vs"
         week = event.get("season", {}).get("week")
+        details = competition.get("details") or []
+        home_id = str(home.get("id") or home_team.get("id") or "")
+        away_id = str(away.get("id") or away_team.get("id") or "")
+        home_red_cards = sum(1 for detail in details if detail.get("redCard") and str(detail.get("team", {}).get("id", "")) == home_id)
+        away_red_cards = sum(1 for detail in details if detail.get("redCard") and str(detail.get("team", {}).get("id", "")) == away_id)
 
         matches.append(
             {
                 "id": str(event.get("id", "")),
                 "league": league["name"],
                 "leagueSlug": league["slug"],
-                "homeId": str(home.get("id") or home_team.get("id") or ""),
-                "awayId": str(away.get("id") or away_team.get("id") or ""),
+                "homeId": home_id,
+                "awayId": away_id,
                 "homeTeam": clean_team_name(home_team.get("displayName", "Ev Sahibi")),
                 "awayTeam": clean_team_name(away_team.get("displayName", "Deplasman")),
                 "homeLogo": _logo_url(home_team),
                 "awayLogo": _logo_url(away_team),
-                "homeScore": str(home.get("score", "0")),
-                "awayScore": str(away.get("score", "0")),
+                "homeScore": home_score,
+                "awayScore": away_score,
                 "score": score,
                 "status": time_meta["type"],
                 "minute": time_meta["display"],
@@ -96,6 +116,9 @@ def parse_fixtures(payload: Dict[str, Any], league: Dict[str, str]) -> List[Dict
                 "startTime": raw_date,
                 "matchDate": match_dt.date().isoformat() if match_dt else "",
                 "round": f"{week}. Hafta" if week else "",
+                "statusDetail": str(status_type.get("shortDetail") or status_type.get("detail") or ""),
+                "homeRedCards": home_red_cards,
+                "awayRedCards": away_red_cards,
             }
         )
     return matches
@@ -302,15 +325,22 @@ def parse_match_detail(payload: Dict[str, Any]) -> Dict[str, Any]:
 
     stats: List[Dict[str, str]] = []
     stats_by_team = _team_map(payload.get("boxscore", {}).get("teams", []))
-    home_stats = {
-        item.get("name"): item.get("displayValue", "-")
-        for item in stats_by_team.get(home_id, {}).get("statistics", [])
-    }
-    away_stats = {
-        item.get("name"): item.get("displayValue", "-")
-        for item in stats_by_team.get(away_id, {}).get("statistics", [])
-    }
+    def stat_values(items: List[Dict[str, Any]]) -> Dict[str, str]:
+        values: Dict[str, str] = {}
+        for item in items:
+            name = str(item.get("name") or "")
+            label = str(item.get("label") or item.get("displayName") or "")
+            normalized = re.sub(r"[^a-z0-9]", "", f"{name}{label}".lower())
+            if "expectedgoal" in normalized or normalized in {"xg", "xgoals"}:
+                name = "expectedGoals"
+            if name:
+                values[name] = str(item.get("displayValue", "-"))
+        return values
+
+    home_stats = stat_values(stats_by_team.get(home_id, {}).get("statistics", []))
+    away_stats = stat_values(stats_by_team.get(away_id, {}).get("statistics", []))
     for key, title in (
+        ("expectedGoals", "Beklenen Gol (xG)"),
         ("possessionPct", "Topla Oynama (%)"),
         ("totalShots", "Toplam Şut"),
         ("shotsOnTarget", "İsabetli Şut"),
@@ -364,6 +394,7 @@ def parse_standings(payload: Dict[str, Any]) -> Dict[str, Any]:
         for entry in entries:
             team = entry.get("team", {})
             values = {stat.get("name"): stat.get("displayValue", "-") for stat in entry.get("stats", [])}
+            note = entry.get("note") or {}
             rows.append(
                 {
                     "rank": values.get("rank", "-"),
@@ -376,6 +407,8 @@ def parse_standings(payload: Dict[str, Any]) -> Dict[str, Any]:
                     "losses": values.get("losses", "-"),
                     "goalDifference": values.get("pointDifferential", "-"),
                     "points": values.get("points", "-"),
+                    "note": str(note.get("description") or ""),
+                    "noteColor": str(note.get("color") or ""),
                 }
             )
         groups.append({"name": child.get("name", payload.get("name", "Puan Durumu")), "rows": rows})
@@ -414,6 +447,29 @@ def _team_match(match: Dict[str, Any], team_id: str) -> Dict[str, Any]:
         "startTime": match.get("startTime", ""),
         "result": result,
     }
+
+
+def _performance_summary(matches: List[Dict[str, Any]], venue: Optional[str] = None) -> Dict[str, int]:
+    selected = [
+        match for match in matches
+        if match.get("status") == "FT" and (venue is None or (venue == "home") == bool(match.get("isHome")))
+    ]
+    result = {"played": 0, "wins": 0, "draws": 0, "losses": 0, "goalsFor": 0, "goalsAgainst": 0}
+    for match in selected:
+        result["played"] += 1
+        outcome = match.get("result")
+        if outcome == "G":
+            result["wins"] += 1
+        elif outcome == "B":
+            result["draws"] += 1
+        elif outcome == "M":
+            result["losses"] += 1
+        scores = [part.strip() for part in str(match.get("score", "")).split("-")]
+        if len(scores) == 2 and all(score.isdigit() for score in scores):
+            first, second = map(int, scores)
+            result["goalsFor"] += first if match.get("isHome") else second
+            result["goalsAgainst"] += second if match.get("isHome") else first
+    return result
 
 
 def parse_team_detail(
@@ -478,8 +534,86 @@ def parse_team_detail(
         },
         "recent": recent,
         "upcoming": upcoming,
+        "performance": {
+            "home": _performance_summary(all_matches, "home"),
+            "away": _performance_summary(all_matches, "away"),
+        },
         "squad": squad,
     }
+
+
+def parse_head_to_head(
+    payload: Dict[str, Any],
+    home_id: str,
+    away_id: str,
+    league: Dict[str, str],
+) -> Dict[str, Any]:
+    meetings = []
+    for match in parse_fixtures(payload, league):
+        if {match.get("homeId"), match.get("awayId")} != {home_id, away_id} or match.get("status") != "FT":
+            continue
+        try:
+            home_score = int(match["homeScore"] if match.get("homeId") == home_id else match["awayScore"])
+            away_score = int(match["awayScore"] if match.get("awayId") == away_id else match["homeScore"])
+        except (KeyError, TypeError, ValueError):
+            home_score = away_score = 0
+        winner = "draw" if home_score == away_score else ("home" if home_score > away_score else "away")
+        meetings.append({**match, "winner": winner})
+    meetings.sort(key=lambda match: str(match.get("startTime", "")), reverse=True)
+    meetings = meetings[:5]
+    return {
+        "homeWins": sum(match["winner"] == "home" for match in meetings),
+        "draws": sum(match["winner"] == "draw" for match in meetings),
+        "awayWins": sum(match["winner"] == "away" for match in meetings),
+        "matches": meetings,
+    }
+
+
+def parse_leaders_html(html: str) -> Dict[str, Any]:
+    match = re.search(r"window\[['\"]__espnfitt__['\"]\]\s*=\s*(\{.*?\});</script>", html, re.DOTALL)
+    empty = {"league": "", "season": "", "goals": [], "assists": []}
+    if not match:
+        return empty
+    try:
+        page = json.loads(match.group(1)).get("page", {}).get("content", {}).get("statistics", {})
+    except (json.JSONDecodeError, TypeError):
+        return empty
+
+    result: Dict[str, Any] = {
+        "league": page.get("league", {}).get("name", ""),
+        "season": page.get("dropdownYear", ""),
+        "goals": [],
+        "assists": [],
+    }
+    tables = page.get("tables") or []
+    row_groups = page.get("tableRows") or []
+    for table, rows in zip(tables, row_groups):
+        headers = [header.get("type", "") for header in table.get("headers", [])]
+        target = "goals" if "totalGoals" in headers else ("assists" if "goalAssists" in headers else "")
+        value_key = "totalGoals" if target == "goals" else "goalAssists"
+        if not target:
+            continue
+        for raw_row in rows[:10]:
+            cells = {key: raw_row[index] for index, key in enumerate(headers) if index < len(raw_row)}
+            athlete = cells.get("athlete") if isinstance(cells.get("athlete"), dict) else {}
+            team = cells.get("team") if isinstance(cells.get("team"), dict) else {}
+            value = cells.get(value_key) if isinstance(cells.get(value_key), dict) else {}
+            appearances = cells.get("appearances") if isinstance(cells.get("appearances"), dict) else {}
+            athlete_match = re.search(r"/id/(\d+)", str(athlete.get("href", "")))
+            team_match = re.search(r"/id/(\d+)", str(team.get("href", "")))
+            athlete_id = athlete_match.group(1) if athlete_match else ""
+            team_id = team_match.group(1) if team_match else ""
+            result[target].append({
+                "rank": str(cells.get("rank", "-")),
+                "athleteId": athlete_id,
+                "name": str(athlete.get("name") or "Bilinmeyen Oyuncu"),
+                "teamId": team_id,
+                "team": clean_team_name(str(team.get("name") or "")),
+                "teamLogo": f"https://a.espncdn.com/i/teamlogos/soccer/500/{team_id}.png" if team_id else "",
+                "appearances": str(appearances.get("value", "-")),
+                "value": str(value.get("value", "-")),
+            })
+    return result
 
 
 class ESPNService:
@@ -488,6 +622,8 @@ class ESPNService:
     STANDINGS_URL = "https://site.api.espn.com/apis/v2/sports/soccer/{slug}/standings"
     TEAM_URL = "https://site.api.espn.com/apis/site/v2/sports/soccer/{slug}/teams/{team_id}"
     ROSTER_URL = "https://site.api.espn.com/apis/site/v2/sports/soccer/{slug}/teams/{team_id}/roster"
+    TEAM_SCHEDULE_URL = "https://site.api.espn.com/apis/site/v2/sports/soccer/{slug}/teams/{team_id}/schedule"
+    LEADERS_URL = "https://www.espn.com/soccer/stats/_/league/{slug}/view/scoring"
 
     def __init__(self) -> None:
         self.cache = TTLCache()
@@ -518,6 +654,21 @@ class ESPNService:
                 if attempt < 2:
                     await asyncio.sleep(0.25 * (2 ** attempt))
         raise ESPNServiceError("ESPN verisine şu anda ulaşılamıyor.") from last_error
+
+    async def _fetch_text(self, url: str) -> str:
+        last_error: Optional[Exception] = None
+        for attempt in range(3):
+            try:
+                response = await self._client_instance().get(url)
+                response.raise_for_status()
+                return response.text
+            except httpx.HTTPError as exc:
+                last_error = exc
+                if isinstance(exc, httpx.HTTPStatusError) and exc.response.status_code < 500 and exc.response.status_code != 429:
+                    break
+                if attempt < 2:
+                    await asyncio.sleep(0.25 * (2 ** attempt))
+        raise ESPNServiceError("ESPN liderlik verisine şu anda ulaşılamıyor.") from last_error
 
     async def _cached(
         self,
@@ -595,6 +746,22 @@ class ESPNService:
             payload = await self._fetch_json(self.STANDINGS_URL.format(slug=league["slug"]))
             return parse_standings(payload)
         return await self._cached(key, 300, load, stale_ttl=7200)
+
+    async def leaders(self, league: Dict[str, str]) -> Dict[str, Any]:
+        key = f"leaders:{league['slug']}"
+        async def load() -> Dict[str, Any]:
+            html = await self._fetch_text(self.LEADERS_URL.format(slug=league["slug"].upper()))
+            return parse_leaders_html(html)
+        return await self._cached(key, 3600, load, stale_ttl=86400)
+
+    async def head_to_head(self, home_id: str, away_id: str, league: Dict[str, str]) -> Dict[str, Any]:
+        key = f"h2h:{league['slug']}:{home_id}:{away_id}"
+        async def load() -> Dict[str, Any]:
+            payload = await self._fetch_json(
+                self.TEAM_SCHEDULE_URL.format(slug=league["slug"], team_id=home_id),
+            )
+            return parse_head_to_head(payload, home_id, away_id, league)
+        return await self._cached(key, 3600, load, stale_ttl=86400)
 
     async def team_detail(self, team_id: str, league: Dict[str, str]) -> Dict[str, Any]:
         key = f"team:{league['slug']}:{team_id}"

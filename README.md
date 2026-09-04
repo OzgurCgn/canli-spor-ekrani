@@ -6,7 +6,7 @@ CanlıSpor; farklı liglerdeki fikstürleri, canlı skorları, maç olaylarını
 
 ## Öne çıkan özellikler
 
-- 12 lig için canlı skor ve günlük fikstür
+- 18 lig için canlı skor ve günlük fikstür
 - Dün / bugün / yarın kısayolları ve takvimden tarih seçimi
 - Takım logoları; canlı maçlarda 15 saniyelik, günün diğer maçlarında daha seyrek akıllı yenileme
 - Gol, penaltı, kendi kalesine gol, sarı/kırmızı kart ve oyuncu değişikliği timeline'ı
@@ -17,6 +17,11 @@ CanlıSpor; farklı liglerdeki fikstürleri, canlı skorları, maç olaylarını
 - Gerçek lig logolarıyla özel lig seçici
 - Takım profili, lig derecesi, form, yaklaşan maçlar ve sezon kadrosu
 - Sekmeli maç merkezi ve 15 gelişmiş takım istatistiği
+- Veri kaynağında bulunduğunda xG ve öne çıkan istatistik kartları
+- Maça özel takip; gol, kırmızı kart, devre ve maç sonu bildirimleri
+- Takım/lig araması ve ana sayfada duruma ya da lige göre gruplama
+- Bu sezonun geçmiş karşılaşmaları ile iç saha/deplasman performansı
+- Lig gol krallığı ve asist liderleri
 - Tarih, lig ve maçı koruyan paylaşılabilir bağlantılar
 - İsteğe bağlı canlı gol bildirimleri
 - Telefona ve masaüstüne kurulabilen PWA desteği
@@ -29,7 +34,7 @@ CanlıSpor; farklı liglerdeki fikstürleri, canlı skorları, maç olaylarını
 
 ## Desteklenen ligler
 
-Süper Lig, Premier League, La Liga, Serie A, Bundesliga, Ligue 1, Eredivisie, Liga Portugal, Suudi Pro Ligi, UEFA Şampiyonlar Ligi, UEFA Avrupa Ligi ve UEFA Konferans Ligi.
+Süper Lig, Premier League, EFL Championship, La Liga, La Liga 2, Serie A, Serie B, Bundesliga, 2. Bundesliga, Ligue 1, Ligue 2, Belçika Pro Ligi, Eredivisie, Liga Portugal, Suudi Pro Ligi, UEFA Şampiyonlar Ligi, UEFA Avrupa Ligi ve UEFA Konferans Ligi.
 
 ## Mimari
 
@@ -111,6 +116,8 @@ docker run --rm -p 8000:8000 canlispor
 | `GET` | `/api/fixtures?league=superlig&date=2026-09-01` | Seçilen günün maçları |
 | `GET` | `/api/match-detail?event_id=...&league_slug=tur.1` | Olay, kadro ve istatistikler |
 | `GET` | `/api/standings?league=superlig` | Lig puan durumu |
+| `GET` | `/api/leaders?league=superlig` | Gol ve asist liderleri |
+| `GET` | `/api/head-to-head?home_id=...&away_id=...&league_slug=tur.1` | Takımların bu sezonki karşılaşmaları |
 | `GET` | `/api/team-detail?team_id=432&league_slug=tur.1` | Takım profili, form, fikstür ve kadro |
 | `GET` | `/api/health` | Sağlık kontrolü |
 | `GET` | `/health` | Harici uptime monitörü için hafif sağlık kontrolü |

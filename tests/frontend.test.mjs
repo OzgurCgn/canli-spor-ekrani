@@ -8,14 +8,18 @@ const sandbox = {
   URLSearchParams,
   document: { addEventListener() {} },
 };
-vm.runInNewContext(`${source}\nObject.assign(globalThis, { leagueChoices, parseURLState, horizontalRank, storedSet, isFavoriteMatch, fixtureCacheTTL, addDays, toISODate });`, sandbox);
+vm.runInNewContext(`${source}\nObject.assign(globalThis, { leagueChoices, parseURLState, horizontalRank, storedSet, isFavoriteMatch, fixtureCacheTTL, addDays, toISODate, normalizeSearch });`, sandbox);
 
 test("league picker has a logo for every supported competition", () => {
-  assert.equal(Object.keys(sandbox.leagueChoices).length, 13);
+  assert.equal(Object.keys(sandbox.leagueChoices).length, 19);
   for (const key of Object.keys(sandbox.leagueChoices)) {
     const choice = sandbox.leagueChoices[key];
     assert.ok(choice.logo || choice.symbol, `${key} needs a visual`);
   }
+});
+
+test("search normalization handles Turkish accents", () => {
+  assert.equal(sandbox.normalizeSearch("  Göztepe  "), "goztepe");
 });
 
 test("shareable URL state accepts supported values", () => {
@@ -70,4 +74,16 @@ test("match detail has a safe return path to the day overview", () => {
   assert.match(source, /state\.detailRequest \+= 1/);
   assert.match(source, /elements\.backToOverview\.addEventListener\("click", returnToDayOverview\)/);
   assert.match(source, /renderDayOverview\(visibleMatches\(\)\)/);
+});
+
+test("feature pack includes follow, grouping, leaders, xg and head-to-head UI", () => {
+  const html = fs.readFileSync(new URL("../static/index.html", import.meta.url), "utf8");
+  assert.match(html, /id="stageFollowButton"/);
+  assert.match(html, /id="leadersTab"/);
+  assert.match(html, /id="matchSearch"/);
+  assert.match(html, /data-detail-tab="h2h"/);
+  assert.match(source, /function toggleFollowedMatch\(match\)/);
+  assert.match(source, /overviewGrouping/);
+  assert.match(source, /Beklenen Gol \(xG\)/);
+  assert.match(source, /loadHeadToHead/);
 });
