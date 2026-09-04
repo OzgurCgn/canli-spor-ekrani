@@ -339,6 +339,21 @@ def parse_match_detail(payload: Dict[str, Any]) -> Dict[str, Any]:
 
     home_stats = stat_values(stats_by_team.get(home_id, {}).get("statistics", []))
     away_stats = stat_values(stats_by_team.get(away_id, {}).get("statistics", []))
+
+    # Some ESPN competitions omit team xG from boxscore. In those responses the
+    # same total is exposed as the opposing goalkeeper's expectedGoalsConceded.
+    xg_conceded: Dict[str, str] = {}
+    for team_leaders in payload.get("leaders", []):
+        team_id = str(team_leaders.get("team", {}).get("id", ""))
+        for category in team_leaders.get("leaders", []):
+            for leader in category.get("leaders", []):
+                for statistic in leader.get("statistics", []):
+                    if statistic.get("name") == "expectedGoalsConceded":
+                        xg_conceded[team_id] = str(statistic.get("displayValue", "-"))
+    if "expectedGoals" not in home_stats and away_id in xg_conceded:
+        home_stats["expectedGoals"] = xg_conceded[away_id]
+    if "expectedGoals" not in away_stats and home_id in xg_conceded:
+        away_stats["expectedGoals"] = xg_conceded[home_id]
     for key, title in (
         ("expectedGoals", "Beklenen Gol (xG)"),
         ("possessionPct", "Topla Oynama (%)"),

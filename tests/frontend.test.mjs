@@ -87,3 +87,8 @@ test("feature pack includes follow, grouping, leaders, xg and head-to-head UI", 
   assert.match(source, /Beklenen Gol \(xG\)/);
   assert.match(source, /loadHeadToHead/);
 });
+
+test("desktop date control opens the native picker", () => {
+  assert.match(source, /datePickerLabel/);
+  assert.match(source, /datePicker\.showPicker\(\)/);
+});

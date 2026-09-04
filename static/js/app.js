@@ -1430,7 +1430,7 @@ function setView(view) {
 
 function bindElements() {
   const ids = [
-    "liveCount", "mainStage", "previousDay", "yesterdayButton", "todayButton", "tomorrowButton", "datePicker", "nextDay",
+    "liveCount", "mainStage", "previousDay", "yesterdayButton", "todayButton", "tomorrowButton", "datePicker", "datePickerLabel", "nextDay",
     "selectedDateLabel", "stagePlaceholder", "stageContent", "backToOverview", "detailsGrid", "stageMeta", "stageHomeLogo",
     "stageAwayLogo", "stageHome", "stageAway", "stageScore", "homeEventsList", "awayEventsList", "stageTag",
     "timeline", "eventCount", "statsContainer", "lineupBadge", "lineupHomeName", "lineupAwayName", "lineupHomeForm",
@@ -1453,6 +1453,12 @@ function bindEvents() {
   elements.todayButton.addEventListener("click", () => setDate(today()));
   elements.tomorrowButton.addEventListener("click", () => setDate(addDays(today(), 1)));
   elements.datePicker.addEventListener("change", event => { if (event.target.value) setDate(event.target.value); });
+  elements.datePickerLabel.addEventListener("click", event => {
+    if (event.target === elements.datePicker) return;
+    event.preventDefault();
+    try { elements.datePicker.showPicker(); }
+    catch (_) { elements.datePicker.focus(); elements.datePicker.click(); }
+  });
   elements.leagueSelect.addEventListener("change", event => {
     state.activeLeague = event.target.value;
     state.selectedMatchId = null;

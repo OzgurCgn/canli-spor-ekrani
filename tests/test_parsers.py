@@ -268,6 +268,26 @@ def test_match_detail_adds_xg_only_when_source_provides_it():
     assert stats[0] == {"title": "Beklenen Gol (xG)", "home": "1.72", "away": "0.64"}
 
 
+def test_match_detail_uses_opposing_goalkeeper_xgc_as_team_xg_fallback():
+    payload = {
+        "header": {"competitions": [{"competitors": [
+            {"id": "h", "homeAway": "home"}, {"id": "a", "homeAway": "away"},
+        ]}]},
+        "leaders": [
+            {"team": {"id": "h"}, "leaders": [{"leaders": [{"statistics": [
+                {"name": "expectedGoalsConceded", "displayValue": "1.45"},
+            ]}]}]},
+            {"team": {"id": "a"}, "leaders": [{"leaders": [{"statistics": [
+                {"name": "expectedGoalsConceded", "displayValue": "0.57"},
+            ]}]}]},
+        ],
+    }
+
+    stats = parse_match_detail(payload)["stats"]
+
+    assert stats[0] == {"title": "Beklenen Gol (xG)", "home": "0.57", "away": "1.45"}
+
+
 def test_visual_lineup_contains_pitch_data_bench_stats_and_event_badges():
     payload = {
         "header": {"competitions": [{"competitors": [

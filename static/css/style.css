@@ -125,6 +125,7 @@ button { color: inherit; }
 .date-shortcut.active { color: #fff; border-color: var(--red); background: rgba(240, 27, 47, .16); }
 
 .date-picker-label {
+  position: relative;
   min-width: 156px;
   display: inline-flex;
   align-items: center;
@@ -135,7 +136,7 @@ button { color: inherit; }
   font-size: .82rem;
   font-weight: 700;
 }
-.date-picker { position: absolute; opacity: 0; pointer-events: none; }
+.date-picker { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer; }
 
 .app-shell {
   width: min(1480px, 100%);
