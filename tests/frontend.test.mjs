@@ -93,3 +93,8 @@ test("desktop date control uses a browser-independent calendar", () => {
   assert.match(source, /calendarPopover/);
   assert.doesNotMatch(source, /\.showPicker\(\)/);
 });
+
+test("changing league keeps the daily overview instead of auto-opening a match", () => {
+  assert.doesNotMatch(source, /selectMatch\(availableMatches\[0\]\)/);
+  assert.match(source, /renderDayOverview\(availableMatches\)/);
+});

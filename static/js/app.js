@@ -569,8 +569,6 @@ function applyFixtureData(data, previousMatches = new Map(), announceChanges = f
   if (selected) {
     setStageMatch(selected);
     if (selected.status === "LIVE" || state.detailMatchId !== selected.id) loadMatchDetail(selected);
-  } else if (availableMatches.length && state.activeLeague !== "all") {
-    selectMatch(availableMatches[0]);
   } else if (state.matches.length) {
     renderDayOverview(availableMatches);
   } else {
