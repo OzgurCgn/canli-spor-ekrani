@@ -130,11 +130,14 @@ test("feature pack includes follow, grouping, leaders, xg and head-to-head UI", 
 
 test("notifications use Web Push instead of page-only Notification objects", () => {
   const worker = fs.readFileSync(new URL("../static/sw.js", import.meta.url), "utf8");
+  const badge = fs.readFileSync(new URL("../static/images/notification-badge.png", import.meta.url));
   assert.match(source, /pushManager\.subscribe/);
   assert.match(source, /\/api\/push\/preferences/);
   assert.doesNotMatch(source, /new Notification\s*\(/);
   assert.match(worker, /addEventListener\("push"/);
   assert.match(worker, /showNotification/);
+  assert.match(worker, /badge: "\/images\/notification-badge\.png"/);
+  assert.deepEqual([...badge.subarray(0, 8)], [137, 80, 78, 71, 13, 10, 26, 10]);
   assert.match(worker, /addEventListener\("notificationclick"/);
   assert.match(worker, /openWindow/);
 });

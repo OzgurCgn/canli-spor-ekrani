@@ -1,7 +1,7 @@
 "use strict";
 
-const CACHE_NAME = "nabiz90-v2";
-const APP_SHELL = ["/", "/css/style.css", "/js/app.js", "/manifest.webmanifest", "/images/app-icon.svg", "/images/app-icon-192.png", "/images/app-icon-512.png"];
+const CACHE_NAME = "nabiz90-v3";
+const APP_SHELL = ["/", "/css/style.css", "/js/app.js", "/manifest.webmanifest", "/images/app-icon.svg", "/images/app-icon-192.png", "/images/app-icon-512.png", "/images/notification-badge.png"];
 
 self.addEventListener("install", event => {
   event.waitUntil(caches.open(CACHE_NAME).then(cache => cache.addAll(APP_SHELL)));
@@ -23,7 +23,7 @@ self.addEventListener("push", event => {
   event.waitUntil(self.registration.showNotification(title, {
     body: payload.body || "Yeni maç gelişmesi",
     icon: payload.icon || "/images/app-icon-192.png",
-    badge: "/images/app-icon-192.png",
+    badge: "/images/notification-badge.png",
     tag: payload.tag || "nabiz90-match-update",
     renotify: true,
     data: { url: payload.url || "/" },
