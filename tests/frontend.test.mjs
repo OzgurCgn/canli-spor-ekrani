@@ -8,7 +8,7 @@ const sandbox = {
   URLSearchParams,
   document: { addEventListener() {} },
 };
-vm.runInNewContext(`${source}\nObject.assign(globalThis, { leagueChoices, parseURLState, horizontalRank, storedSet, isFavoriteMatch, fixtureCacheTTL, addDays, toISODate, normalizeSearch });`, sandbox);
+vm.runInNewContext(`${source}\nObject.assign(globalThis, { leagueChoices, parseURLState, navigationQuery, horizontalRank, formationRows, storedSet, isFavoriteMatch, fixtureCacheTTL, addDays, toISODate, normalizeSearch });`, sandbox);
 
 test("league picker has a logo for every supported competition", () => {
   assert.equal(Object.keys(sandbox.leagueChoices).length, 19);
@@ -33,10 +33,50 @@ test("shareable URL state accepts supported values", () => {
   );
 });
 
+test("daily bookmarks always reopen today while match links retain their date", () => {
+  assert.deepEqual(
+    { ...sandbox.parseURLState("?date=2026-09-05") },
+    { league: "all", date: "", match: null },
+  );
+  assert.equal(sandbox.navigationQuery("all", "2026-09-05", null), "");
+  assert.equal(sandbox.navigationQuery("premier", "2026-09-05", null), "league=premier");
+  assert.equal(sandbox.navigationQuery("premier", "2026-09-05", "401"), "league=premier&date=2026-09-05&match=401");
+});
+
 test("lineup horizontal order keeps right centre-back before right-back", () => {
   const players = ["CD-R", "RB", "LB", "CD-L"].map(pos => ({ pos }));
   players.sort((a, b) => sandbox.horizontalRank(a) - sandbox.horizontalRank(b));
   assert.deepEqual(players.map(player => player.pos), ["LB", "CD-L", "CD-R", "RB"]);
+});
+
+test("formation rows follow the announced shape instead of generic position labels", () => {
+  const arsenal = [
+    ["GK", "1"], ["CD-L", "6"], ["CD-R", "5"], ["LB", "3"], ["RB", "2"],
+    ["AM", "10"], ["LM", "4"], ["RM", "8"], ["F", "9"], ["AM-L", "11"], ["AM-R", "7"],
+  ].map(([pos, formationPlace]) => ({ pos, formationPlace }));
+  assert.deepEqual(
+    Array.from(sandbox.formationRows(arsenal, "4-2-3-1"), row => row.length),
+    [1, 3, 2, 4, 1],
+  );
+
+  const bielefeld = [
+    ["G", "1"], ["CD-L", "6"], ["CD-R", "5"], ["DM", "4"], ["LB", "3"], ["RB", "2"],
+    ["CM-L", "10"], ["CM-R", "8"], ["LM", "11"], ["RM", "7"], ["F", "9"],
+  ].map(([pos, formationPlace]) => ({ pos, formationPlace }));
+  const rows = sandbox.formationRows(bielefeld, "4-1-4-1");
+  assert.deepEqual(Array.from(rows, row => row.length), [1, 4, 1, 4, 1]);
+  assert.equal(rows[2][0].pos, "DM");
+});
+
+test("three-at-the-back formations may use a nominal midfielder in the defensive line", () => {
+  const hannover = [
+    ["G", "1"], ["CD-L", "4"], ["CD", "5"], ["DM", "6"],
+    ["LM", "3"], ["CM-L", "8"], ["CM-R", "7"], ["RM", "2"],
+    ["LF", "11"], ["F", "9"], ["RF", "10"],
+  ].map(([pos, formationPlace]) => ({ pos, formationPlace }));
+  const rows = sandbox.formationRows(hannover, "3-4-3-d");
+  assert.deepEqual(Array.from(rows, row => row.length), [3, 4, 3, 1]);
+  assert.ok(rows[2].some(player => player.pos === "DM"));
 });
 
 test("favorites include team and league matches", () => {

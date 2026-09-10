@@ -104,10 +104,13 @@ function parseURLState(search) {
   const league = params.get("league");
   const selectedDate = params.get("date");
   const match = params.get("match");
+  const validMatch = /^\d+$/.test(match || "") ? match : null;
   return {
     league: league === "all" || leagueSlugs[league] ? league : "all",
-    date: /^\d{4}-\d{2}-\d{2}$/.test(selectedDate || "") ? selectedDate : "",
-    match: /^\d+$/.test(match || "") ? match : null,
+    // Tarih yalnızca paylaşılabilir maç bağlantılarında kalıcıdır. Ana sayfa ve
+    // lig yer imleri her açılışta cihazın bugünkü tarihini kullanır.
+    date: validMatch && /^\d{4}-\d{2}-\d{2}$/.test(selectedDate || "") ? selectedDate : "",
+    match: validMatch,
   };
 }
 
@@ -144,12 +147,19 @@ function savePreferences() {
   } catch (_) { /* Preferences are optional when storage is unavailable. */ }
 }
 
-function syncURL(push = false) {
+function navigationQuery(activeLeague, selectedDate, selectedMatchId) {
   const params = new URLSearchParams();
-  params.set("date", state.selectedDate);
-  if (state.activeLeague !== "all") params.set("league", state.activeLeague);
-  if (state.selectedMatchId) params.set("match", state.selectedMatchId);
-  const url = `${window.location.pathname}?${params.toString()}`;
+  if (activeLeague !== "all") params.set("league", activeLeague);
+  if (selectedMatchId) {
+    params.set("date", selectedDate);
+    params.set("match", selectedMatchId);
+  }
+  return params.toString();
+}
+
+function syncURL(push = false) {
+  const query = navigationQuery(state.activeLeague, state.selectedDate, state.selectedMatchId);
+  const url = query ? `${window.location.pathname}?${query}` : window.location.pathname;
   window.history[push ? "pushState" : "replaceState"]({}, "", url);
 }
 
@@ -1104,20 +1114,107 @@ function playerPosition(player) {
 function playerBand(player) {
   const pos = String(player.pos || "").toUpperCase();
   if (pos === "G" || pos.includes("GK")) return "goalkeeper";
-  if (pos.startsWith("AM") || pos.startsWith("CF") || pos.includes("W")) return "attacking";
-  if (pos === "F" || pos.includes("ST")) return "forward";
-  if (pos.includes("D") || pos === "LB" || pos === "RB") return "defense";
+  if (["F", "LF", "RF"].includes(pos) || pos.startsWith("CF") || pos.includes("ST")) return "forward";
+  if (pos.startsWith("AM") || pos.includes("W")) return "attacking";
+  if (pos === "D" || pos.startsWith("CD") || ["LB", "RB", "LWB", "RWB"].includes(pos)) return "defense";
   if (pos.includes("M")) return "midfield";
   return "attacking";
 }
 
 function horizontalRank(player) {
   const pos = String(player.pos || "").toUpperCase();
-  if (["LB", "LWB", "LM", "LW"].includes(pos)) return 0;
+  if (["LB", "LWB", "LM", "LW", "LF"].includes(pos)) return 0;
   if (pos.endsWith("-L")) return 1;
   if (pos.endsWith("-R")) return 3;
-  if (["RB", "RWB", "RM", "RW"].includes(pos)) return 4;
+  if (["RB", "RWB", "RM", "RW", "RF"].includes(pos)) return 4;
   return 2;
+}
+
+function formationNumbers(formation) {
+  const values = String(formation || "").match(/\d+/g)?.map(Number) || [];
+  return values.length >= 2 && values.every(value => value > 0) && values.reduce((sum, value) => sum + value, 0) === 10
+    ? values
+    : [];
+}
+
+function formationPlace(player) {
+  const value = Number(player.formationPlace);
+  return Number.isFinite(value) && value > 0 ? value : 99;
+}
+
+function isGoalkeeper(player) {
+  const pos = String(player.pos || "").toUpperCase();
+  return pos === "G" || pos.includes("GK") || formationPlace(player) === 1;
+}
+
+function isDefensivePosition(player) {
+  const pos = String(player.pos || "").toUpperCase();
+  return pos === "D" || pos.startsWith("CD") || ["LB", "RB", "LWB", "RWB"].includes(pos);
+}
+
+function attackingPriority(player) {
+  const pos = String(player.pos || "").toUpperCase();
+  const place = formationPlace(player);
+  if (place === 9) return 0;
+  if (["F", "LF", "RF"].includes(pos) || pos.startsWith("CF") || pos.includes("ST")) return 1;
+  if ([10, 11].includes(place) && (pos.startsWith("AM") || pos.includes("W"))) return 2;
+  if (pos.startsWith("AM") || pos.includes("W")) return 3;
+  return 4;
+}
+
+function midfieldDepth(player) {
+  const pos = String(player.pos || "").toUpperCase();
+  if (pos === "DM" || pos.startsWith("DM-")) return 0;
+  if (pos === "M" || pos.startsWith("CM") || ["LM", "RM"].includes(pos)) return 1;
+  if (pos.startsWith("AM") || ["LW", "RW"].includes(pos)) return 2;
+  if (["F", "LF", "RF"].includes(pos) || pos.startsWith("CF") || pos.includes("ST")) return 3;
+  return 1;
+}
+
+function sortLinePlayers(players) {
+  return players.sort((a, b) => horizontalRank(a) - horizontalRank(b) || formationPlace(a) - formationPlace(b));
+}
+
+function formationRows(players, formation) {
+  const counts = formationNumbers(formation);
+  const goalkeeper = players.find(isGoalkeeper);
+  const outfield = players.filter(player => player !== goalkeeper);
+  if (!goalkeeper || !counts.length || counts.reduce((sum, value) => sum + value, 0) !== outfield.length) return [];
+
+  const defenderCount = counts[0];
+  const expectedDefensePlaces = new Set(
+    defenderCount === 3 ? [4, 5, 6]
+      : defenderCount === 4 ? [2, 3, 5, 6]
+        : defenderCount === 5 ? [2, 3, 4, 5, 6]
+          : [],
+  );
+  const defense = outfield
+    .slice()
+    .sort((a, b) => {
+      const aScore = expectedDefensePlaces.has(formationPlace(a)) ? 0 : (isDefensivePosition(a) ? 1 : 2);
+      const bScore = expectedDefensePlaces.has(formationPlace(b)) ? 0 : (isDefensivePosition(b) ? 1 : 2);
+      return aScore - bScore || formationPlace(a) - formationPlace(b);
+    })
+    .slice(0, defenderCount);
+
+  let remaining = outfield.filter(player => !defense.includes(player));
+  const attackerCount = counts.at(-1);
+  const attack = remaining
+    .slice()
+    .sort((a, b) => attackingPriority(a) - attackingPriority(b) || formationPlace(a) - formationPlace(b))
+    .slice(0, attackerCount);
+  remaining = remaining.filter(player => !attack.includes(player));
+
+  const middleRows = [];
+  const orderedMiddle = remaining.sort((a, b) => midfieldDepth(a) - midfieldDepth(b) || formationPlace(a) - formationPlace(b));
+  let offset = 0;
+  for (const count of counts.slice(1, -1)) {
+    middleRows.push(sortLinePlayers(orderedMiddle.slice(offset, offset + count)));
+    offset += count;
+  }
+
+  if (offset !== orderedMiddle.length) return [];
+  return [sortLinePlayers(attack), ...middleRows.reverse(), sortLinePlayers(defense), [goalkeeper]];
 }
 
 function eventBadge(badge, compact = false) {
@@ -1348,7 +1445,7 @@ function benchPlayer(player) {
   return button;
 }
 
-function lineupVisual(players, bench) {
+function lineupVisual(players, bench, formation) {
   if (!players.length) return emptyState("Kadro açıklanmadı.");
   const content = node("div", "pitch-and-bench");
   const pitch = node("div", "football-pitch");
@@ -1358,12 +1455,17 @@ function lineupVisual(players, bench) {
     node("span", "pitch-box top"),
     node("span", "pitch-box bottom"),
   );
-  for (const band of ["forward", "attacking", "midfield", "defense", "goalkeeper"]) {
-    const linePlayers = players
-      .filter(player => playerBand(player) === band)
-      .sort((a, b) => horizontalRank(a) - horizontalRank(b) || Number(a.formationPlace || 99) - Number(b.formationPlace || 99));
+  const tacticalRows = formationRows(players, formation);
+  const rows = tacticalRows.length
+    ? tacticalRows
+    : ["forward", "attacking", "midfield", "defense", "goalkeeper"]
+      .map(band => sortLinePlayers(players.filter(player => playerBand(player) === band)))
+      .filter(row => row.length);
+  pitch.style.minHeight = `${Math.max(520, rows.length * 98 + 54)}px`;
+  pitch.style.gridTemplateRows = `repeat(${rows.length}, minmax(94px, 1fr))`;
+  for (const linePlayers of rows) {
     if (!linePlayers.length) continue;
-    const row = node("div", `pitch-row ${band}`);
+    const row = node("div", "pitch-row");
     row.style.gridTemplateColumns = `repeat(${linePlayers.length}, minmax(0, 1fr))`;
     row.append(...linePlayers.map(pitchPlayer));
     pitch.append(row);
@@ -1401,8 +1503,8 @@ function renderLineups(lineups) {
   elements.lineupAwayTab.textContent = elements.lineupAwayName.textContent;
   const home = lineups.home || [];
   const away = lineups.away || [];
-  elements.homeLineupList.replaceChildren(lineupVisual(home, lineups.homeBench || []));
-  elements.awayLineupList.replaceChildren(lineupVisual(away, lineups.awayBench || []));
+  elements.homeLineupList.replaceChildren(lineupVisual(home, lineups.homeBench || [], lineups.homeFormation));
+  elements.awayLineupList.replaceChildren(lineupVisual(away, lineups.awayBench || [], lineups.awayFormation));
   setMobileLineup("home");
 }
 
