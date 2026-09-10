@@ -644,7 +644,7 @@ async function toggleNotifications() {
 
 function updateNotificationButton() {
   const permission = "Notification" in window ? Notification.permission : "denied";
-  if (permission === "denied") state.notificationsEnabled = false;
+  if (permission !== "granted") state.notificationsEnabled = false;
   const active = state.notificationsEnabled && permission === "granted";
   const partial = !active && state.followedMatches.size > 0 && permission === "granted";
   elements.notificationButton.classList.toggle("active", active);

@@ -46,9 +46,13 @@ def notification_events(previous: Dict[str, Any], current: Dict[str, Any]) -> Li
     if old_status == "NS" and status == "LIVE":
         events.append({"kind": "kickoff", "title": "Maç başladı", "body": f"{home} - {away} • {league}"})
 
-    old_total = _integer(previous.get("homeScore")) + _integer(previous.get("awayScore"))
-    total = _integer(current.get("homeScore")) + _integer(current.get("awayScore"))
-    if status != "NS" and score != previous.get("score"):
+    old_home = _integer(previous.get("homeScore"))
+    old_away = _integer(previous.get("awayScore"))
+    current_home = _integer(current.get("homeScore"))
+    current_away = _integer(current.get("awayScore"))
+    old_total = old_home + old_away
+    total = current_home + current_away
+    if status != "NS" and (old_home, old_away) != (current_home, current_away):
         title = "Gol!" if total > old_total else "Skor güncellendi"
         events.append({"kind": "goal", "title": title, "body": f"{home} {score} {away} • {detail}"})
 

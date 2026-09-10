@@ -79,5 +79,8 @@ def test_notification_transitions_cover_background_match_updates():
     events = notification_events(previous, live)
     assert [event["kind"] for event in events] == ["kickoff", "goal"]
 
+    goalless_kickoff = {**live, "score": "0 - 0", "homeScore": "0"}
+    assert [event["kind"] for event in notification_events(previous, goalless_kickoff)] == ["kickoff"]
+
     full_time = {**live, "status": "FT", "statusDetail": "Full Time", "minute": "MS"}
     assert [event["kind"] for event in notification_events(live, full_time)] == ["full-time"]
