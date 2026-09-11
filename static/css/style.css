@@ -712,7 +712,7 @@ button { color: inherit; }
   .sidebar-controls { top: 62px; grid-template-columns: 1fr 1fr; }
   .league-picker-row, .filter-row, .match-search { grid-column: 1 / -1; }
   .sidebar-content { max-height: 390px; overflow-y: auto; }
-  .main-stage { grid-row: 2; }
+  .main-stage { grid-row: 2; scroll-margin-top: 72px; }
 }
 
 @media (max-width: 640px) {

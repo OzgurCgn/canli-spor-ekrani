@@ -930,6 +930,15 @@ function returnToDayOverview() {
   renderDayOverview(visibleMatches());
 }
 
+function revealSelectedMatchOnMobile() {
+  const mobileLayout = window.matchMedia?.("(max-width: 900px)").matches ?? window.innerWidth <= 900;
+  if (!mobileLayout) return;
+  const reduceMotion = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ?? false;
+  window.requestAnimationFrame(() => {
+    elements.mainStage.scrollIntoView({ behavior: reduceMotion ? "auto" : "smooth", block: "start" });
+  });
+}
+
 async function selectMatch(match) {
   if (!match) return;
   state.selectedMatchId = match.id;
@@ -938,6 +947,7 @@ async function selectMatch(match) {
   renderMatches();
   setStageMatch(match);
   resetDetails();
+  revealSelectedMatchOnMobile();
   await loadMatchDetail(match);
 }
 

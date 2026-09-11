@@ -8,7 +8,7 @@ const sandbox = {
   URLSearchParams,
   document: { addEventListener() {} },
 };
-vm.runInNewContext(`${source}\nObject.assign(globalThis, { leagueChoices, parseURLState, navigationQuery, horizontalRank, formationRows, storedSet, isFavoriteMatch, fixtureCacheTTL, addDays, toISODate, normalizeSearch });`, sandbox);
+vm.runInNewContext(`${source}\nObject.assign(globalThis, { leagueChoices, parseURLState, navigationQuery, horizontalRank, formationRows, storedSet, isFavoriteMatch, fixtureCacheTTL, addDays, toISODate, normalizeSearch, revealSelectedMatchOnMobile, testElements: elements });`, sandbox);
 
 test("league picker has a logo for every supported competition", () => {
   assert.equal(Object.keys(sandbox.leagueChoices).length, 19);
@@ -151,4 +151,27 @@ test("desktop date control uses a browser-independent calendar", () => {
 test("changing league keeps the daily overview instead of auto-opening a match", () => {
   assert.doesNotMatch(source, /selectMatch\(availableMatches\[0\]\)/);
   assert.match(source, /renderDayOverview\(availableMatches\)/);
+});
+
+test("selecting a match reveals its detail card on mobile without affecting desktop", () => {
+  const css = fs.readFileSync(new URL("../static/css/style.css", import.meta.url), "utf8");
+  const scrolls = [];
+  sandbox.testElements.mainStage = { scrollIntoView: options => scrolls.push({ ...options }) };
+  sandbox.window = {
+    innerWidth: 390,
+    matchMedia: query => ({ matches: query.includes("max-width") }),
+    requestAnimationFrame: callback => callback(),
+  };
+  sandbox.revealSelectedMatchOnMobile();
+  assert.deepEqual(scrolls, [{ behavior: "smooth", block: "start" }]);
+
+  sandbox.window.innerWidth = 1200;
+  sandbox.window.matchMedia = () => ({ matches: false });
+  sandbox.revealSelectedMatchOnMobile();
+  assert.equal(scrolls.length, 1);
+  assert.match(source, /function revealSelectedMatchOnMobile\(\)/);
+  assert.match(source, /matchMedia\?\.\("\(max-width: 900px\)"\)/);
+  assert.match(source, /elements\.mainStage\.scrollIntoView\(\{ behavior: reduceMotion \? "auto" : "smooth", block: "start" \}\)/);
+  assert.match(source, /resetDetails\(\);\s*revealSelectedMatchOnMobile\(\);\s*await loadMatchDetail\(match\);/);
+  assert.match(css, /\.main-stage \{ grid-row: 2; scroll-margin-top: 72px; \}/);
 });
